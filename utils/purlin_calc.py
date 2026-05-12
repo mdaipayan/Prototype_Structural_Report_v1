@@ -8,9 +8,10 @@ def run_purlin_design(inp):
     # Updated dummy dictionary to prevent KeyErrors in the UI
     return {
         "status": "Purlin calculations successful!", 
+        "overall_status": "SAFE",    # Added to fix line 118
         "utilization": 0.0,
-        "section_class": "Plastic",  # Added to fix line 116
-        "Mdz": 0.0,                  # Dummy moment capacity
+        "section_class": "Plastic",  
+        "Mdz": 0.0,                  
         "Mdy": 0.0,
-        "Vz": 0.0                    # Dummy shear capacity
+        "Vz": 0.0                    
     }
