@@ -159,25 +159,41 @@ Wind load:
 
     # ── Step 2: Section Classification ────────────────────────
     with st.expander("📌 Step 2 — Section Classification  [IS 800:2007 Table 2]"):
+        
+        # --- SAFE EXTRACTION START ---
+        eps = cls.get('epsilon', 0.0)
+        b_tf_val = cls.get('b_tf', 0.0)
+        d_tw_val = cls.get('d_tw', 0.0)
+        
+        # Safely handle the nested 'limits' dictionary
+        limits = cls.get('limits', {})
+        f_lim = limits.get('flange', [0.0, 0.0, 0.0])
+        w_lim = limits.get('web', [0.0, 0.0, 0.0])
+        
+        f_class = cls.get('flange_class', 'Unknown')
+        w_class = cls.get('web_class', 'Unknown')
+        overall_class = cls.get('overall', 'Unknown')
+        # --- SAFE EXTRACTION END ---
+
         st.markdown(f"""
 <div class="formula-box">
-ε  =  √(250 / fy)  =  √(250 / {r['fy']:.0f})  =  {cls['epsilon']:.4f}
+ε  =  √(250 / fy)  =  √(250 / {r.get('fy', 250):.0f})  =  {eps:.4f}
 
 Outstand flange ratio:
-  b/tf  =  ({sp['bf']}/2 − {sp['tw']}/2) / {sp['tf']}  =  {cls['b_tf']:.2f}
-  Plastic limit  9.4ε  =  {cls['limits']['flange'][0]:.2f}
-  Compact  limit 13.6ε =  {cls['limits']['flange'][1]:.2f}
-  Semi-compact  15.7ε  =  {cls['limits']['flange'][2]:.2f}
-  → Flange: {cls['flange_class']}
+  b/tf  =  ({sp.get('bf',0)}/2 − {sp.get('tw',0)}/2) / {sp.get('tf',1)}  =  {b_tf_val:.2f}
+  Plastic limit  9.4ε  =  {f_lim[0]:.2f}
+  Compact  limit 13.6ε =  {f_lim[1]:.2f}
+  Semi-compact  15.7ε  =  {f_lim[2]:.2f}
+  → Flange: {f_class}
 
 Web ratio:
-  d/tw  =  ({sp['h']} − 2×{sp['tf']}) / {sp['tw']}  =  {cls['d_tw']:.2f}
-  Plastic limit  84ε   =  {cls['limits']['web'][0]:.2f}
-  Compact  limit 105ε  =  {cls['limits']['web'][1]:.2f}
-  Semi-compact  126ε   =  {cls['limits']['web'][2]:.2f}
-  → Web: {cls['web_class']}
+  d/tw  =  ({sp.get('h',0)} − 2×{sp.get('tf',0)}) / {sp.get('tw',1)}  =  {d_tw_val:.2f}
+  Plastic limit  84ε   =  {w_lim[0]:.2f}
+  Compact  limit 105ε  =  {w_lim[1]:.2f}
+  Semi-compact  126ε   =  {w_lim[2]:.2f}
+  → Web: {w_class}
 
-Overall Classification:  {cls['overall']}
+Overall Classification:  {overall_class}
 </div>
 """, unsafe_allow_html=True)
 
