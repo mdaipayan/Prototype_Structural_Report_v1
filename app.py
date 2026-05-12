@@ -103,7 +103,7 @@ with col1:
     <span class='is-badge'>IS 875 Pt.1,2,3</span>
     """, unsafe_allow_html=True)
     if st.button("Open Purlin Design →", use_container_width=True, type="primary"):
-        st.switch_page("pages/1_Purlin_Design.py")
+        st.switch_page("1_Purlin_Design.py")
 
 with col2:
     st.markdown("### 🧱 Girt Design")
