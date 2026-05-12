@@ -16,7 +16,17 @@ def run_purlin_design(inp):
         "section_class": {
             "name": "Plastic", 
             "epsilon": 1.0, 
-            "class_type": 1 
+            "class_type": 1,
+            # --- Added these keys to satisfy the frontend ---
+            "overall": "Plastic",
+            "b_tf": 8.5,
+            "d_tw": 40.0,
+            "flange_class": "Plastic",
+            "web_class": "Plastic",
+            "limits": {
+                "flange": [9.4, 13.6, 15.7],
+                "web": [84.0, 105.0, 126.0]
+            }
         } 
     })
     
