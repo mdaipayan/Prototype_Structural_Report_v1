@@ -138,7 +138,7 @@ with col3:
 st.divider()
 st.markdown("""
 <div style='text-align:center; color:#888; font-size:0.82rem; padding:8px'>
-IS Steel Design Suite &nbsp;|&nbsp; D.Mandal. &nbsp;|&nbsp;
+IS Steel Design Suite &nbsp;|&nbsp; D. Mandal &nbsp;|&nbsp;
 Designed for educational & professional reference use as per BIS codes
 </div>
 """, unsafe_allow_html=True)
