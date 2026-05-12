@@ -1,13 +1,16 @@
-# Save this inside utils/purlin_calc.py
 def run_purlin_design(inp):
     """
     Placeholder function for Purlin Design calculations.
     Accepts an input dictionary 'inp' containing user parameters.
     """
-    # Later, you will extract your inputs here. For example:
-    # span = inp.get("span_length")
-    # wind_pressure = inp.get("wind_load")
+    # Later, you will extract your inputs here.
     
-    # For now, we return a dummy success message or dictionary 
-    # so the app doesn't crash while you build the UI.
-    return {"status": "Purlin calculations successful!", "utilization": 0.0}
+    # Updated dummy dictionary to prevent KeyErrors in the UI
+    return {
+        "status": "Purlin calculations successful!", 
+        "utilization": 0.0,
+        "section_class": "Plastic",  # Added to fix line 116
+        "Mdz": 0.0,                  # Dummy moment capacity
+        "Mdy": 0.0,
+        "Vz": 0.0                    # Dummy shear capacity
+    }
