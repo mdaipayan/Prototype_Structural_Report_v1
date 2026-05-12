@@ -90,7 +90,7 @@ with c3:
 
     with st.expander("📋 Section Properties (auto-filled from SP 6(1):1964)"):
         col_a, col_b = st.columns(2)
-        col_a.metric("A (cm²)", sp["A"])
+        col_a.metric("A (cm²)", sp["Area"])
         col_a.metric("Ixx (cm⁴)", sp["Ixx"])
         col_a.metric("Zpx (cm³)", sp["Zpx"])
         col_b.metric("h × bf (mm)", f"{sp['h']} × {sp['bf']}")
