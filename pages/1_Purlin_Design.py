@@ -173,9 +173,7 @@ with c3:
         col_b.metric("tf / tw (mm)", f"{sp.get('tf', 0)} / {sp.get('tw', 0)}")
         col_b.metric("Weight (kg/m)", sp.get("weight", 0))
 
-with st.expander(
-    "📚 Common Purlin Section Types Used in IS-Based Design", expanded=False
-):
+with st.expander("📚 Common Purlin Section Types Used in IS-Based Design", expanded=False):
     st.markdown(
         "The calculation module currently designs rolled **ISMB**, **ISLB**, and **ISMC** "
         "sections from the project database. The table below also documents other common "
@@ -183,16 +181,14 @@ with st.expander(
         "designers can distinguish calculable rolled sections from guidance-only alternatives."
     )
     st.dataframe(
-        pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(
-            columns={
-                "type": "Section Type",
-                "shape": "Common Shape",
-                "designation": "Common IS / Trade Designation",
-                "examples": "Examples",
-                "typical_use": "Typical Use",
-                "calculation_status": "Calculation Status",
-            }
-        ),
+        pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(columns={
+            "type": "Section Type",
+            "shape": "Common Shape",
+            "designation": "Common IS / Trade Designation",
+            "examples": "Examples",
+            "typical_use": "Typical Use",
+            "calculation_status": "Calculation Status",
+        }),
         hide_index=True,
         use_container_width=True,
     )
