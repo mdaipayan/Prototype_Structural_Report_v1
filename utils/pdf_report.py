@@ -240,7 +240,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
 
     sec_rows = [
         ["Section Designation",              r["section_name"]],
-        ["Cross-sectional Area (A)",         f"{sp['A']:.2f} cm²"],
+        ["Cross-sectional Area (A)",         f"{sp['Area']:.2f} cm²"],
         ["Overall Depth (h)",                f"{sp['h']} mm"],
         ["Flange Width (bf)",                f"{sp['bf']} mm"],
         ["Flange Thickness (tf)",            f"{sp['tf']} mm"],
@@ -485,7 +485,7 @@ def generate_girt_pdf(r: dict, project: str = "") -> bytes:
 
     sec_rows = [
         ["Section Designation",             r["section_name"]],
-        ["Cross-sectional Area (A)",        f"{sp['A']:.2f} cm²"],
+        ["Cross-sectional Area (A)",        f"{sp['Area']:.2f} cm²"],
         ["h × bf × tf × tw",               f"{sp['h']} × {sp['bf']} × {sp['tf']} × {sp['tw']} mm"],
         ["Ixx (cm⁴)",                       f"{sp['Ixx']:.2f}"],
         ["Iyy (cm⁴)",                       f"{sp['Iyy']:.2f}"],
@@ -669,7 +669,7 @@ def generate_column_pdf(r: dict, project: str = "") -> bytes:
     sec_rows = [
         ["Section Designation",             r["section_name"]],
         ["Section Type",                    r["section_type"]],
-        ["Area (A)",                        f"{r['A_mm2']:.2f} mm²  ({sp['A']:.2f} cm²)"],
+        ["Area (A)",                        f"{r['A_mm2']:.2f} mm²  ({sp['Area']:.2f} cm²)"],
         ["h × bf × tf × tw",               f"{sp['h']} × {sp['bf']} × {sp['tf']} × {sp['tw']} mm"],
         ["Ixx / Iyy (cm⁴)",                f"{sp['Ixx']:.2f} / {sp['Iyy']:.2f}"],
         ["rxx (rzz) / ryy (cm)",            f"{sp['rxx']:.2f} / {sp['ryy']:.2f}"],
