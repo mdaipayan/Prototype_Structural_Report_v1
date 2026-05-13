@@ -39,6 +39,62 @@ ISMC = {
     "ISMC 300": {"h": 300, "bf": 90, "tw": 7.6, "tf": 13.6, "Area": 45.6, "weight": 35.8, "Ixx": 6362.0, "Iyy": 310.0, "Zxx": 424.1, "Zyy": 68.89, "Zpx": 483.5, "Zpy": 120.6},
 }
 
+
+# Common purlin section families used in IS-based steel roof framing.
+# Rolled-section properties below are tabulated as per IS 808 / SP 6(1);
+# cold-formed C/Z purlins are listed for design guidance and generally need
+# cold-formed steel checks before they are added to the calculable database.
+COMMON_PURLIN_SECTION_TYPES = [
+    {
+        "type": "Channel sections",
+        "shape": "C-channel / U-channel",
+        "designation": "ISMC / ISLC",
+        "examples": "ISMC 100, ISMC 150, ISMC 200",
+        "typical_use": "Most common rolled purlin option for roof sheeting support and simple rafter connections.",
+        "calculation_status": "Available for design when present in ISMC table",
+    },
+    {
+        "type": "Beam / I-sections",
+        "shape": "I-shape / beam profile",
+        "designation": "ISMB / ISLB",
+        "examples": "ISMB 150, ISMB 200, ISLB 200",
+        "typical_use": "Used where longer spans, heavier roof loads, or higher wind effects require greater flexural stiffness.",
+        "calculation_status": "Available for design when present in ISMB/ISLB tables",
+    },
+    {
+        "type": "Angle sections",
+        "shape": "L-shape / double-angle",
+        "designation": "ISA",
+        "examples": "Single angle or double angle purlins",
+        "typical_use": "Economical for lighter roofs and shorter spans; often adopted as single or back-to-back double angles.",
+        "calculation_status": "Guidance only; not yet in section database",
+    },
+    {
+        "type": "Cold-formed C-sections",
+        "shape": "C-shape / lipped channel",
+        "designation": "C / lipped C",
+        "examples": "Plain C, lipped C",
+        "typical_use": "Common in light-gauge and pre-engineered building roof systems.",
+        "calculation_status": "Guidance only; requires cold-formed member checks",
+    },
+    {
+        "type": "Cold-formed Z-sections",
+        "shape": "Z-shape / lipped Z",
+        "designation": "Z / lipped Z",
+        "examples": "Plain Z, lipped Z",
+        "typical_use": "Preferred for continuous purlin lines and lap connections over supports in PEB roofs.",
+        "calculation_status": "Guidance only; requires cold-formed member checks",
+    },
+    {
+        "type": "Hollow / box sections",
+        "shape": "RHS / SHS / box profile",
+        "designation": "IS 4923 tubular sections",
+        "examples": "RHS, SHS, fabricated box purlins",
+        "typical_use": "Occasionally used where torsional stiffness, closed profiles, or architectural exposed framing are required.",
+        "calculation_status": "Guidance only; not yet in section database",
+    },
+]
+
 # Combine all dictionaries into one master lookup variable
 ALL_SECTIONS = {}
 ALL_SECTIONS.update(ISMB)
