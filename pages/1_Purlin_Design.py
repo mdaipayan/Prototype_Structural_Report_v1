@@ -7,12 +7,12 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import streamlit as st
+import pandas as pd
 from utils.sections import ISMB, ISLB, ISMC, ALL_SECTIONS
 from utils.purlin_calc import run_purlin_design
 from utils.pdf_report import generate_purlin_pdf
 
-st.set_page_config(page_title="Purlin Design | IS 800:2007",
-                   page_icon="📐", layout="wide")
+st.set_page_config(page_title="Purlin Design | IS 800:2007", page_icon="📐", layout="wide")
 
 st.markdown("""
 <style>
@@ -38,8 +38,7 @@ st.caption("Loading: IS 875 Pt.1 (DL) + Pt.2 (LL) + Pt.3 (Wind)  |  "
 
 # ── Sidebar — Project info ─────────────────────────────────────────────────
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/a/a8/Bureau_of_Indian_Standards_%28BIS%29_Logo.svg/220px-Bureau_of_Indian_Standards_%28BIS%29_Logo.svg.png",
-             width=80)
+    st.image("https://upload.wikimedia.org/wikipedia/en/thumb/a/a8/Bureau_of_Indian_Standards_%28BIS%29_Logo.svg/220px-Bureau_of_Indian_Standards_%28BIS%29_Logo.svg.png", width=80)
     st.markdown("### Purlin Design")
     st.markdown("**References**")
     st.markdown("- IS 800:2007 Cl. 8.2.1\n- IS 800:2007 Cl. 9.3.1.1\n- IS 800:2007 Cl. 8.4.1\n- IS 875 Pt.1/2/3\n- SP 6(1):1964")
@@ -51,32 +50,22 @@ c1, c2, c3 = st.columns(3)
 
 with c1:
     st.markdown("**Geometry**")
-    span    = st.number_input("Span L (m)", 1.0, 20.0, 5.0, 0.25,
-                              help="Purlin span between supports (m)")
-    spacing = st.number_input("Purlin Spacing (m)", 0.5, 5.0, 1.5, 0.25,
-                              help="Centre-to-centre spacing of purlins (m)")
-    slope   = st.number_input("Roof Slope θ (°)", 0.0, 45.0, 10.0, 0.5,
-                              help="Inclination of roof surface with horizontal")
+    span    = st.number_input("Span L (m)", 1.0, 20.0, 5.0, 0.25, help="Purlin span between supports (m)")
+    spacing = st.number_input("Purlin Spacing (m)", 0.5, 5.0, 1.5, 0.25, help="Centre-to-centre spacing of purlins (m)")
+    slope   = st.number_input("Roof Slope θ (°)", 0.0, 45.0, 10.0, 0.5, help="Inclination of roof surface with horizontal")
 
 with c2:
     st.markdown("**Loading  (IS 875)**")
-    dead_load    = st.number_input("Dead Load (kN/m²)", 0.1, 3.0, 0.55, 0.05,
-                                   help="Roofing + insulation (excluding purlin self-wt)")
-    live_load    = st.number_input("Live Load (kN/m²)", 0.0, 2.0, 0.75, 0.05,
-                                   help="IS 875 Pt.2: 0.75 kN/m² for slopes ≤ 10°")
-    wind_pres    = st.number_input("Design Wind Pressure qd (kN/m²)", 0.1, 3.0, 0.70, 0.05,
-                                   help="Design wind pressure from IS 875 Pt.3 Cl.5.4")
-    Cpe          = st.number_input("Ext. Pressure Coeff Cpe", -2.0, 2.0, -0.8, 0.05,
-                                   help="For roof: typically −0.8 (suction) on windward slope")
-    Cpi          = st.number_input("Int. Pressure Coeff Cpi", -0.5, 0.5, 0.2, 0.05,
-                                   help="Dominant openings: +0.2 or −0.2 per IS 875 Pt.3")
+    dead_load = st.number_input("Dead Load (kN/m²)", 0.1, 3.0, 0.55, 0.05, help="Roofing + insulation (excluding purlin self-wt)")
+    live_load = st.number_input("Live Load (kN/m²)", 0.0, 2.0, 0.75, 0.05, help="IS 875 Pt.2: 0.75 kN/m² for slopes ≤ 10°")
+    wind_pres = st.number_input("Design Wind Pressure qd (kN/m²)", 0.1, 3.0, 0.70, 0.05, help="Design wind pressure from IS 875 Pt.3 Cl.5.4")
+    Cpe       = st.number_input("Ext. Pressure Coeff Cpe", -2.0, 2.0, -0.8, 0.05, help="For roof: typically −0.8 (suction) on windward slope")
+    Cpi       = st.number_input("Int. Pressure Coeff Cpi", -0.5, 0.5, 0.2, 0.05, help="Dominant openings: +0.2 or −0.2 per IS 875 Pt.3")
 
 with c3:
     st.markdown("**Material & Section**")
-    fy      = st.selectbox("Steel Grade fy (MPa)", [250, 345, 410], index=0,
-                           help="IS 2062: E250=250 MPa, E350=345 MPa, E410=410 MPa")
-    gm0     = st.number_input("γm0", 1.00, 1.25, 1.10, 0.01,
-                              help="IS 800 Cl.5.4.1 — Partial safety factor for resistance")
+    fy  = st.selectbox("Steel Grade fy (MPa)", [250, 345, 410], index=0, help="IS 2062: E250=250 MPa, E350=345 MPa, E410=410 MPa")
+    gm0 = st.number_input("γm0", 1.00, 1.25, 1.10, 0.01, help="IS 800 Cl.5.4.1 — Partial safety factor for resistance")
 
     all_sec_types = {
         "ISMB (I-Beam)": ISMB,
@@ -86,18 +75,17 @@ with c3:
     sec_type_label = st.selectbox("Section Type", list(all_sec_types.keys()))
     sec_dict  = all_sec_types[sec_type_label]
     sec_names = list(sec_dict.keys())
-    sec_name  = st.selectbox("Section Designation", sec_names,
-                             index=min(4, len(sec_names)-1))
+    sec_name  = st.selectbox("Section Designation", sec_names, index=min(4, len(sec_names)-1))
     sp = sec_dict[sec_name]
 
     with st.expander("📋 Section Properties (auto-filled from SP 6(1):1964)"):
         col_a, col_b = st.columns(2)
-        col_a.metric("A (cm²)", sp["Area"])
-        col_a.metric("Ixx (cm⁴)", sp["Ixx"])
-        col_a.metric("Zpx (cm³)", sp["Zpx"])
-        col_b.metric("h × bf (mm)", f"{sp['h']} × {sp['bf']}")
-        col_b.metric("tf / tw (mm)", f"{sp['tf']} / {sp['tw']}")
-        col_b.metric("Weight (kg/m)", sp["weight"])
+        col_a.metric("A (cm²)", sp.get("Area", 0))
+        col_a.metric("Ixx (cm⁴)", sp.get("Ixx", 0))
+        col_a.metric("Zpx (cm³)", sp.get("Zpx", 0))
+        col_b.metric("h × bf (mm)", f"{sp.get('h', 0)} × {sp.get('bf', 0)}")
+        col_b.metric("tf / tw (mm)", f"{sp.get('tf', 0)} / {sp.get('tw', 0)}")
+        col_b.metric("Weight (kg/m)", sp.get("weight", 0))
 
 # ── Run Calculation ────────────────────────────────────────────────────────
 if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):
@@ -115,9 +103,9 @@ if st.button("▶  Run Purlin Design", use_container_width=True, type="primary")
 # ── Display Results ────────────────────────────────────────────────────────
 if "purlin_result" in st.session_state:
     r = st.session_state["purlin_result"]
-    cls = r["section_class"]
+    cls = r.get("section_class", {})
 
-    ok_all = "SAFE" in r["overall_status"]
+    ok_all = "SAFE" in r.get("overall_status", "")
     if ok_all:
         st.success(f"✅ **{r['overall_status']}** — Section {r['section_name']} is adequate.")
     else:
@@ -127,8 +115,7 @@ if "purlin_result" in st.session_state:
 
     # ── Step 1: Loads ──────────────────────────────────────────
     with st.expander("📌 Step 1 — Load Calculation  [IS 875]", expanded=True):
-        st.markdown('<div class="step-header">1.1  Self Weight & Distributed Loads</div>',
-                    unsafe_allow_html=True)
+        st.markdown('<div class="step-header">1.1  Self Weight & Distributed Loads</div>', unsafe_allow_html=True)
         st.markdown(f"""
 <div class="formula-box">
 Self weight of purlin  =  {r['sw_kNm']:.4f} kN/m  [SP 6(1):1964]
@@ -148,13 +135,12 @@ Wind load:
 </div>
 """, unsafe_allow_html=True)
 
-        st.markdown('<div class="step-header">1.2  Load Combinations  [IS 800:2007 Table 4]</div>',
-                    unsafe_allow_html=True)
-        import pandas as pd
+        st.markdown('<div class="step-header">1.2  Load Combinations  [IS 800:2007 Table 4]</div>', unsafe_allow_html=True)
+        
         combo_df = pd.DataFrame({
             "Load Combo": ["LC1: 1.5(DL+LL)", "LC2: 1.2(DL+LL+Wind)", "LC3: 0.9DL+1.5Wind"],
-            "wz,d (kN/m)": [r["wz_1"], r["wz_2"], r["wz_3"]],
-            "wy,d (kN/m)": [r["wy_1"], r["wy_2"], r["wy_3"]],
+            "wz,d (kN/m)": [r.get("wz_1", 0), r.get("wz_2", 0), r.get("wz_3", 0)],
+            "wy,d (kN/m)": [r.get("wy_1", 0), r.get("wy_2", 0), r.get("wy_3", 0)],
         })
         st.dataframe(combo_df.set_index("Load Combo"), use_container_width=True)
         st.info(f"**Governing loads:**  wz,d = {r['wz_d']:.4f} kN/m  |  wy,d = {r['wy_d']:.4f} kN/m")
@@ -162,12 +148,10 @@ Wind load:
     # ── Step 2: Section Classification ────────────────────────
     with st.expander("📌 Step 2 — Section Classification  [IS 800:2007 Table 2]"):
         
-        # --- SAFE EXTRACTION START ---
-        eps = cls.get('epsilon', 0.0)
+        eps = cls.get('epsilon', (250/float(fy))**0.5)
         b_tf_val = cls.get('b_tf', 0.0)
         d_tw_val = cls.get('d_tw', 0.0)
         
-        # Safely handle the nested 'limits' dictionary
         limits = cls.get('limits', {})
         f_lim = limits.get('flange', [0.0, 0.0, 0.0])
         w_lim = limits.get('web', [0.0, 0.0, 0.0])
@@ -175,7 +159,6 @@ Wind load:
         f_class = cls.get('flange_class', 'Unknown')
         w_class = cls.get('web_class', 'Unknown')
         overall_class = cls.get('overall', 'Unknown')
-        # --- SAFE EXTRACTION END ---
 
         st.markdown(f"""
 <div class="formula-box">
@@ -215,15 +198,15 @@ Vy  =  wy,d × L / 2  =  {r['wy_d']:.4f} × {span:.2f} / 2  =  {r['Vy_kN']:.4f} 
 
     # ── Step 4: Moment Capacity ────────────────────────────────
     with st.expander("📌 Step 4 — Design Moment Capacity  [IS 800:2007 Cl. 8.2.1]"):
-        if cls["overall"] in ("Plastic", "Compact"):
+        if overall_class in ("Plastic", "Compact"):
             st.markdown(f"""
 <div class="formula-box">
-{cls['overall']} section → use plastic section modulus
+{overall_class} section → use plastic section modulus
 
-Mdz  =  βb × Zpx × fy / γm0  =  1.0 × {sp['Zpx']:.2f} cm³ × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)
+Mdz  =  βb × Zpx × fy / γm0  =  1.0 × {sp.get('Zpx', 0):.2f} cm³ × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)
      =  {r['Mdz_kNm']:.4f} kNm  [IS 800 Cl. 8.2.1.2]
 
-Mdy  =  βb × Zpy × fy / γm0  =  1.0 × {sp['Zpy']:.2f} cm³ × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)
+Mdy  =  βb × Zpy × fy / γm0  =  1.0 × {sp.get('Zpy', 0):.2f} cm³ × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)
      =  {r['Mdy_kNm']:.4f} kNm
 </div>
 """, unsafe_allow_html=True)
@@ -232,8 +215,8 @@ Mdy  =  βb × Zpy × fy / γm0  =  1.0 × {sp['Zpy']:.2f} cm³ × {r['fy']:.0f}
 <div class="formula-box">
 Semi-compact section → use elastic section modulus
 
-Mdz  =  Zxx × fy / γm0  =  {sp['Zxx']:.2f} × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)  =  {r['Mdz_kNm']:.4f} kNm
-Mdy  =  Zyy × fy / γm0  =  {sp['Zyy']:.2f} × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)  =  {r['Mdy_kNm']:.4f} kNm
+Mdz  =  Zxx × fy / γm0  =  {sp.get('Zxx', 0):.2f} × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)  =  {r['Mdz_kNm']:.4f} kNm
+Mdy  =  Zyy × fy / γm0  =  {sp.get('Zyy', 0):.2f} × {r['fy']:.0f} / ({r['gm0']:.2f} × 1000)  =  {r['Mdy_kNm']:.4f} kNm
 </div>
 """, unsafe_allow_html=True)
 
@@ -246,71 +229,64 @@ My / Mdy  +  Mz / Mdz  ≤  1.0
 {r['My_kNm']:.4f} / {r['Mdy_kNm']:.4f}  +  {r['Mz_kNm']:.4f} / {r['Mdz_kNm']:.4f}  =  {r['biaxial_ratio']:.4f}
 </div>
 """, unsafe_allow_html=True)
-        if r["biaxial_ok"]:
-            st.markdown(f'<div class="result-safe">✓ PASS — Biaxial ratio = <b>{r["biaxial_ratio"]:.4f}</b> ≤ 1.0</div>',
-                        unsafe_allow_html=True)
+        if r.get("biaxial_ok"):
+            st.markdown(f'<div class="result-safe">✓ PASS — Biaxial ratio = <b>{r["biaxial_ratio"]:.4f}</b> ≤ 1.0</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="result-fail">✗ FAIL — Biaxial ratio = <b>{r["biaxial_ratio"]:.4f}</b> > 1.0</div>',
-                        unsafe_allow_html=True)
+            st.markdown(f'<div class="result-fail">✗ FAIL — Biaxial ratio = <b>{r["biaxial_ratio"]:.4f}</b> > 1.0</div>', unsafe_allow_html=True)
 
     # ── Step 6: Shear ──────────────────────────────────────────
     with st.expander("📌 Step 6 — Shear Capacity Check  [IS 800:2007 Cl. 8.4.1]"):
         st.markdown(f"""
 <div class="formula-box">
-Shear area:  Av  =  h × tw  =  {sp['h']} × {sp['tw']}  =  {r['Av_mm2']:.0f} mm²
+Shear area:  Av  =  h × tw  =  {sp.get('h', 0)} × {sp.get('tw', 0)}  =  {r['Av_mm2']:.0f} mm²
 
 Vd  =  Av × fy / (√3 × γm0)  =  {r['Av_mm2']:.0f} × {r['fy']:.0f} / (√3 × {r['gm0']:.2f} × 1000)
-   =  {r['Vd_kN']:.4f} kN
+    =  {r['Vd_kN']:.4f} kN
 
 Vz (applied)  =  {r['Vz_kN']:.4f} kN
 </div>
 """, unsafe_allow_html=True)
-        if r["shear_ok"]:
+        if r.get("shear_ok"):
             st.markdown(f'<div class="result-safe">✓ PASS — Vz = {r["Vz_kN"]:.4f} kN ≤ Vd = {r["Vd_kN"]:.4f} kN  '
                         f'({r["Vz_kN"]/r["Vd_kN"]*100:.1f}% utilisation)</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="result-fail">✗ FAIL — Vz = {r["Vz_kN"]:.4f} kN > Vd = {r["Vd_kN"]:.4f} kN</div>',
-                        unsafe_allow_html=True)
+            st.markdown(f'<div class="result-fail">✗ FAIL — Vz = {r["Vz_kN"]:.4f} kN > Vd = {r["Vd_kN"]:.4f} kN</div>', unsafe_allow_html=True)
 
     # ── Step 7: Deflection ─────────────────────────────────────
     with st.expander("📌 Step 7 — Deflection Check  [IS 800:2007 Table 6]"):
         st.markdown(f"""
 <div class="formula-box">
-Service load (unfactored):  wz,ser  =  {r['wz_DL']+r['wz_LL']:.4f} kN/m
+Service load (unfactored):  wz,ser  =  {r['wz_DL']+r['wz_LL']:.4f} N/mm
 
 δ_max  =  5 × wz,ser × L⁴ / (384 × E × Izz)
-       =  5 × {r['wz_DL']+r['wz_LL']:.4f}×10³/10³ × ({span*1000:.0f})⁴ / (384 × 2×10⁵ × {sp['Ixx']:.1f}×10⁴)
+       =  5 × {r['wz_DL']+r['wz_LL']:.4f} × ({span*1000:.0f})⁴ / (384 × 2×10⁵ × {sp.get('Ixx', 0):.1f}×10⁴)
        =  {r['delta_max_mm']:.3f} mm
 
 Permissible:  L / 180  =  {span*1000:.0f} / 180  =  {r['delta_limit_mm']:.3f} mm
 </div>
 """, unsafe_allow_html=True)
-        if r["defl_ok"]:
-            st.markdown(f'<div class="result-safe">✓ PASS — δ = {r["delta_max_mm"]:.3f} mm ≤ L/180 = {r["delta_limit_mm"]:.3f} mm</div>',
-                        unsafe_allow_html=True)
+        if r.get("defl_ok"):
+            st.markdown(f'<div class="result-safe">✓ PASS — δ = {r["delta_max_mm"]:.3f} mm ≤ L/180 = {r["delta_limit_mm"]:.3f} mm</div>', unsafe_allow_html=True)
         else:
-            st.markdown(f'<div class="result-fail">✗ FAIL — δ = {r["delta_max_mm"]:.3f} mm > L/180 = {r["delta_limit_mm"]:.3f} mm</div>',
-                        unsafe_allow_html=True)
+            st.markdown(f'<div class="result-fail">✗ FAIL — δ = {r["delta_max_mm"]:.3f} mm > L/180 = {r["delta_limit_mm"]:.3f} mm</div>', unsafe_allow_html=True)
 
     # ── Summary Table ──────────────────────────────────────────
     st.divider()
     st.markdown("### 📊 Design Summary")
-    import pandas as pd
+    
     summary = pd.DataFrame({
         "Check": ["Biaxial Bending", "Shear Capacity", "Deflection"],
-        "Applied": [f"{r['biaxial_ratio']:.4f}", f"Vz = {r['Vz_kN']:.4f} kN",
-                    f"δ = {r['delta_max_mm']:.3f} mm"],
-        "Capacity": ["1.000", f"Vd = {r['Vd_kN']:.4f} kN",
-                     f"L/180 = {r['delta_limit_mm']:.3f} mm"],
+        "Applied": [f"{r['biaxial_ratio']:.4f}", f"Vz = {r['Vz_kN']:.4f} kN", f"δ = {r['delta_max_mm']:.3f} mm"],
+        "Capacity": ["1.000", f"Vd = {r['Vd_kN']:.4f} kN", f"L/180 = {r['delta_limit_mm']:.3f} mm"],
         "Utilisation (%)": [
             f"{r['biaxial_ratio']*100:.1f}",
             f"{r['Vz_kN']/r['Vd_kN']*100:.1f}",
             f"{r['delta_max_mm']/r['delta_limit_mm']*100:.1f}",
         ],
         "Status": [
-            "✅ PASS" if r["biaxial_ok"] else "❌ FAIL",
-            "✅ PASS" if r["shear_ok"]   else "❌ FAIL",
-            "✅ PASS" if r["defl_ok"]    else "❌ FAIL",
+            "✅ PASS" if r.get("biaxial_ok") else "❌ FAIL",
+            "✅ PASS" if r.get("shear_ok")   else "❌ FAIL",
+            "✅ PASS" if r.get("defl_ok")    else "❌ FAIL",
         ],
     })
     st.dataframe(summary.set_index("Check"), use_container_width=True)
