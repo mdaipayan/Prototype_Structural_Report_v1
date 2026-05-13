@@ -12,12 +12,13 @@ def run_purlin_design(inp):
         "status": "Purlin calculations successful!", 
         "overall_status": "SAFE",
         "section_name": inp.get("section_name", "Test Section"),
-        "fy": 250.0, 
         
-        # --- Add these to prevent ZeroDivisionError in the Summary Table ---
-        "Vd_kN": 100.0,         # Denominator for Shear Check
-        "delta_limit_mm": 25.0, # Denominator for Deflection Check
-        # -------------------------------------------------------------------
+        # ADD THIS LINE: Pass the section properties back to the UI/PDF!
+        "section_props": inp.get("section_props", {"Area": 0.0, "h": 0.0, "bf": 0.0, "tf": 0.0, "tw": 0.0}),
+        
+        "fy": 250.0, 
+        "Vd_kN": 100.0, 
+        "delta_limit_mm": 25.0,
         
         "section_class": {
             "name": "Plastic", 
