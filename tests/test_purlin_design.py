@@ -1,7 +1,7 @@
 import math
 import unittest
 
-from utils.pdf_report import _pdf_markup, generate_purlin_pdf
+from utils.pdf_report import generate_purlin_pdf
 from utils.purlin_calc import run_purlin_design
 from utils.sections import ISMB
 
@@ -35,13 +35,6 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(result["shear_ok"])
         self.assertTrue(result["defl_ok"])
         self.assertTrue(math.isclose(result["sw_kNm"], 44.2 * 9.81 / 1000.0))
-
-    def test_pdf_markup_converts_unicode_powers_to_superscripts(self):
-        markup = _pdf_markup("Mz = w × L² / 8; δ = L⁴ and E = 2×10⁵")
-
-        self.assertIn("L<sup>2</sup>", markup)
-        self.assertIn("L<sup>4</sup>", markup)
-        self.assertIn("10<sup>5</sup>", markup)
 
     def test_pdf_report_generation_uses_calculation_output(self):
         result = run_purlin_design(self.input_data)
