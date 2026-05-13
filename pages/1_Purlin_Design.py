@@ -2,7 +2,6 @@
 Page 1 — Purlin Design
 IS 800:2007 + IS 875 (Part 1, 2, 3)
 """
-import math
 import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -31,7 +30,12 @@ section[data-testid="stSidebar"] *{color:#FFF!important;}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown("## 📐 Purlin Design — IS 800:2007")
+st.markdown("""
+<div style="background:linear-gradient(90deg,#1A3557,#2E6DA4);padding:22px 26px;border-radius:14px;margin-bottom:14px;color:white;">
+  <h1 style="margin:0;color:white;">📐 Purlin Design — IS 800:2007</h1>
+  <p style="margin:6px 0 0;color:#D6E8F7;">Step-by-step roof purlin loading, biaxial bending, shear, deflection, and PDF report generation.</p>
+</div>
+""", unsafe_allow_html=True)
 st.caption("Loading: IS 875 Pt.1 (DL) + Pt.2 (LL) + Pt.3 (Wind)  |  "
            "Section check: IS 800:2007 Cl. 8.2.1, 9.3.1.1, 8.4.1  |  "
            "Sections: SP 6(1):1964 / IS 808:1989")
@@ -99,17 +103,27 @@ if st.button("▶  Run Purlin Design", use_container_width=True, type="primary")
     r = run_purlin_design(inp)
     st.session_state["purlin_result"] = r
     st.session_state["purlin_project"] = project_name
+    st.session_state["purlin_section_name"] = sec_name
 
 # ── Display Results ────────────────────────────────────────────────────────
 if "purlin_result" in st.session_state:
     r = st.session_state["purlin_result"]
     cls = r.get("section_class", {})
 
-    ok_all = "SAFE" in r.get("overall_status", "")
+    ok_all = r.get("overall_status") == "SAFE"
+    status_icon = "✅" if ok_all else "❌"
+    st.markdown(f"### {status_icon} Overall Status: **{r['overall_status']}**")
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Governing Combo", r.get("governing_combo", "—").split(":", 1)[0])
+    m2.metric("Biaxial Utilisation", f"{r['biaxial_ratio']*100:.1f}%")
+    m3.metric("Shear Utilisation", f"{r.get('shear_ratio', 0)*100:.1f}%")
+    m4.metric("Deflection Utilisation", f"{r.get('defl_ratio', 0)*100:.1f}%")
+
     if ok_all:
-        st.success(f"✅ **{r['overall_status']}** — Section {r['section_name']} is adequate.")
+        st.success(f"Section **{r['section_name']}** is adequate for the selected design inputs.")
     else:
-        st.error(f"❌ **{r['overall_status']}** — Please choose a larger section.")
+        st.error(f"Section **{r['section_name']}** is not adequate. Increase the section size or revise spacing/span/loading.")
 
     st.divider()
 
@@ -143,7 +157,10 @@ Wind load:
             "wy,d (kN/m)": [r.get("wy_1", 0), r.get("wy_2", 0), r.get("wy_3", 0)],
         })
         st.dataframe(combo_df.set_index("Load Combo"), use_container_width=True)
-        st.info(f"**Governing loads:**  wz,d = {r['wz_d']:.4f} kN/m  |  wy,d = {r['wy_d']:.4f} kN/m")
+        st.info(
+            f"**Governing combo:** {r.get('governing_combo', '—')}  |  "
+            f"design magnitudes: wz,d = {r['wz_d']:.4f} kN/m, wy,d = {r['wy_d']:.4f} kN/m"
+        )
 
     # ── Step 2: Section Classification ────────────────────────
     with st.expander("📌 Step 2 — Section Classification  [IS 800:2007 Table 2]"):
@@ -280,8 +297,8 @@ Permissible:  L / 180  =  {span*1000:.0f} / 180  =  {r['delta_limit_mm']:.3f} mm
         "Capacity": ["1.000", f"Vd = {r['Vd_kN']:.4f} kN", f"L/180 = {r['delta_limit_mm']:.3f} mm"],
         "Utilisation (%)": [
             f"{r['biaxial_ratio']*100:.1f}",
-            f"{r['Vz_kN']/r['Vd_kN']*100:.1f}",
-            f"{r['delta_max_mm']/r['delta_limit_mm']*100:.1f}",
+            f"{r.get('shear_ratio', 0)*100:.1f}",
+            f"{r.get('defl_ratio', 0)*100:.1f}",
         ],
         "Status": [
             "✅ PASS" if r.get("biaxial_ok") else "❌ FAIL",
@@ -295,10 +312,11 @@ Permissible:  L / 180  =  {span*1000:.0f} / 180  =  {r['delta_limit_mm']:.3f} mm
     st.divider()
     st.markdown("### 📄 Download Design Report (PDF)")
     pdf_bytes = generate_purlin_pdf(r, project=st.session_state.get("purlin_project",""))
+    download_name = st.session_state.get("purlin_section_name", r.get("section_name", "Purlin"))
     st.download_button(
         label="⬇️  Download PDF Report",
         data=pdf_bytes,
-        file_name=f"Purlin_Design_{sec_name.replace(' ','_')}.pdf",
+        file_name=f"Purlin_Design_{download_name.replace(' ','_')}.pdf",
         mime="application/pdf",
         use_container_width=True,
         type="primary",
