@@ -50,7 +50,9 @@ def _section_classification(sp: dict[str, Any], fy: float) -> dict[str, Any]:
 
     flange_class = _classify_ratio(b_tf, flange_limits)
     web_class = _classify_ratio(d_tw, web_limits)
-    overall = max([flange_class, web_class], key=lambda label: SECTION_CLASS_ORDER[label])
+    overall = max(
+        [flange_class, web_class], key=lambda label: SECTION_CLASS_ORDER[label]
+    )
 
     return {
         "name": overall,
@@ -144,7 +146,9 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     L_mm = span_m * 1000.0
     Ixx_mm4 = _as_float(sp.get("Ixx")) * 1.0e4
     service_w = wz_DL + wz_LL  # kN/m == N/mm
-    delta_max_mm = (5.0 * service_w * L_mm**4 / (384.0 * E * Ixx_mm4)) if Ixx_mm4 else math.inf
+    delta_max_mm = (
+        (5.0 * service_w * L_mm**4 / (384.0 * E * Ixx_mm4)) if Ixx_mm4 else math.inf
+    )
     delta_limit_mm = L_mm / 180.0
     defl_ratio = _safe_ratio(delta_max_mm, delta_limit_mm)
     defl_ok = defl_ratio <= 1.0
