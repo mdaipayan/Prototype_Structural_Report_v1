@@ -3,6 +3,7 @@ PDF Report Generator — IS 800:2007 Steel Design Suite
 Uses ReportLab Platypus for professional, structured engineering reports.
 """
 import io, math
+from xml.sax.saxutils import escape
 from datetime import datetime
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
@@ -27,6 +28,35 @@ WHITE      = colors.white
 
 PAGE_W, PAGE_H = A4
 MARGIN = 18 * mm
+
+_SUPERSCRIPT_MAP = str.maketrans({
+    "⁰": "0", "¹": "1", "²": "2", "³": "3", "⁴": "4",
+    "⁵": "5", "⁶": "6", "⁷": "7", "⁸": "8", "⁹": "9",
+    "⁻": "-", "⁺": "+",
+})
+_SUPERSCRIPT_CHARS = set("⁰¹²³⁴⁵⁶⁷⁸⁹⁻⁺")
+
+
+def _pdf_markup(value) -> str:
+    """Escape text and convert unicode power glyphs to ReportLab superscripts."""
+    text = escape(str(value))
+    out = []
+    i = 0
+    while i < len(text):
+        if text[i] in _SUPERSCRIPT_CHARS:
+            j = i
+            while j < len(text) and text[j] in _SUPERSCRIPT_CHARS:
+                j += 1
+            out.append(f"<sup>{text[i:j].translate(_SUPERSCRIPT_MAP)}</sup>")
+            i = j
+        else:
+            out.append(text[i])
+            i += 1
+    return "".join(out).replace("\n", "<br/>")
+
+
+def _para(value, style):
+    return Paragraph(_pdf_markup(value), style)
 
 # ── Style Factory ────────────────────────────────────────────────────────────
 def _styles():
@@ -54,6 +84,12 @@ def _styles():
     s["body"] = ParagraphStyle("body", parent=base["Normal"],
         fontName="Helvetica", fontSize=9.2, leading=13,
         textColor=colors.black, spaceAfter=2)
+
+    s["body_right"] = ParagraphStyle("body_right", parent=s["body"],
+        alignment=TA_RIGHT)
+
+    s["table_head"] = ParagraphStyle("table_head", parent=s["body"],
+        fontName="Helvetica-Bold", textColor=WHITE, alignment=TA_CENTER)
 
     s["formula"] = ParagraphStyle("formula", parent=base["Normal"],
         fontName="Courier-Bold", fontSize=9, textColor=DARK_BLUE,
@@ -132,7 +168,9 @@ def _input_table(rows: list, s: dict, title: str = ""):
     elems = []
     if title:
         elems += _subheading(title, s)
-    data = [["Parameter", "Value / Unit"]] + rows
+    data = [[_para("Parameter", s["table_head"]), _para("Value / Unit", s["table_head"])] ] + [
+        [_para(label, s["body"]), _para(value, s["body_right"])] for label, value in rows
+    ]
     cw = [(PAGE_W - 2*MARGIN) * 0.62, (PAGE_W - 2*MARGIN) * 0.38]
     t = Table(data, colWidths=cw)
     t.setStyle(TableStyle([
@@ -175,9 +213,9 @@ def _result_box(label: str, value: str, ok: bool, s: dict):
 
 
 def _formula_block(formula: str, s: dict, ref: str = ""):
-    elems = [Paragraph(formula, s["formula"])]
+    elems = [_para(formula, s["formula"])]
     if ref:
-        elems.append(Paragraph(f"[Ref: {ref}]", s["ref"]))
+        elems.append(_para(f"[Ref: {ref}]", s["ref"]))
     return elems + [Spacer(1, 2)]
 
 
