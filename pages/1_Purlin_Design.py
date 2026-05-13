@@ -2,7 +2,9 @@
 Page 1 — Purlin Design
 IS 800:2007 + IS 875 (Part 1, 2, 3)
 """
-import math, sys, os
+import math
+import os
+import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import streamlit as st
 from utils.sections import ISMB, ISLB, ISMC, ALL_SECTIONS
