@@ -238,21 +238,21 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     story += _input_table(rows, s, "1.1  Loading & Material Data")
 
     sec_rows = [
-        ["Section Designation",             r["section_name"]],
-        ["Cross-sectional Area (A)",         f"{sp['Area']:.2f} cm²"],
-        ["Overall Depth (h)",                f"{sp['h']} mm"],
-        ["Flange Width (bf)",                f"{sp['bf']} mm"],
-        ["Flange Thickness (tf)",            f"{sp['tf']} mm"],
-        ["Web Thickness (tw)",               f"{sp['tw']} mm"],
-        ["Moment of Inertia Ixx (Izz)",      f"{sp['Ixx']:.1f} cm⁴"],
-        ["Moment of Inertia Iyy",            f"{sp['Iyy']:.2f} cm⁴"],
-        ["Elastic Mod. Zxx (Zzz)",           f"{sp['Zxx']:.2f} cm³"],
-        ["Elastic Mod. Zyy",                 f"{sp['Zyy']:.2f} cm³"],
-        ["Plastic Mod. Zpx",                 f"{sp['Zpx']:.2f} cm³"],
-        ["Plastic Mod. Zpy",                 f"{sp['Zpy']:.2f} cm³"],
-        ["Radius of Gyration rxx (rzz)",     f"{sp['rxx']:.2f} cm"],
-        ["Radius of Gyration ryy",           f"{sp['ryy']:.2f} cm"],
-        ["Self Weight",                      f"{sp['weight']:.1f} kg/m  [{r['sw_kNm']:.4f} kN/m]"],
+        ["Section Designation",              r.get("section_name", "Unknown")],
+        ["Cross-sectional Area (A)",         f"{sp.get('Area', 0.0):.2f} cm²"],
+        ["Overall Depth (h)",                f"{sp.get('h', 0.0)} mm"],
+        ["Flange Width (bf)",                f"{sp.get('bf', 0.0)} mm"],
+        ["Flange Thickness (tf)",            f"{sp.get('tf', 0.0)} mm"],
+        ["Web Thickness (tw)",               f"{sp.get('tw', 0.0)} mm"],
+        ["Moment of Inertia Ixx (Izz)",      f"{sp.get('Ixx', 0.0):.1f} cm⁴"],
+        ["Moment of Inertia Iyy",            f"{sp.get('Iyy', 0.0):.2f} cm⁴"],
+        ["Elastic Mod. Zxx (Zzz)",           f"{sp.get('Zxx', 0.0):.2f} cm³"],
+        ["Elastic Mod. Zyy",                 f"{sp.get('Zyy', 0.0):.2f} cm³"],
+        ["Plastic Mod. Zpx",                 f"{sp.get('Zpx', 0.0):.2f} cm³"],
+        ["Plastic Mod. Zpy",                 f"{sp.get('Zpy', 0.0):.2f} cm³"],
+        ["Radius of Gyration rxx (rzz)",     f"{sp.get('rxx', 0.0):.2f} cm"],
+        ["Radius of Gyration ryy",           f"{sp.get('ryy', 0.0):.2f} cm"],
+        ["Self Weight",                      f"{sp.get('weight', 0.0):.1f} kg/m  [{r.get('sw_kNm', 0.0):.4f} kN/m]"],
     ]
     story += _input_table(sec_rows, s, "1.2  Section Properties  [Ref: SP 6(1):1964 / IS 808:1989]")
 
