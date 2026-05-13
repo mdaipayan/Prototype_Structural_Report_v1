@@ -13,7 +13,6 @@ from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
     HRFlowable, KeepTogether, PageBreak
 )
-from reportlab.platypus.flowables import HRFlowable
 
 # ── Colour Palette ──────────────────────────────────────────────────────────
 DARK_BLUE  = colors.HexColor("#1A3557")
@@ -239,7 +238,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     story += _input_table(rows, s, "1.1  Loading & Material Data")
 
     sec_rows = [
-        ["Section Designation",              r["section_name"]],
+        ["Section Designation",             r["section_name"]],
         ["Cross-sectional Area (A)",         f"{sp['Area']:.2f} cm²"],
         ["Overall Depth (h)",                f"{sp['h']} mm"],
         ["Flange Width (bf)",                f"{sp['bf']} mm"],
