@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import streamlit as st
 import pandas as pd
-from utils.sections import ISMB, ISLB, ISMC, ALL_SECTIONS
+from utils.sections import COMMON_PURLIN_SECTION_TYPES, ISMB, ISLB, ISMC
 from utils.purlin_calc import run_purlin_design
 from utils.pdf_report import generate_purlin_pdf
 
@@ -90,6 +90,31 @@ with c3:
         col_b.metric("h × bf (mm)", f"{sp.get('h', 0)} × {sp.get('bf', 0)}")
         col_b.metric("tf / tw (mm)", f"{sp.get('tf', 0)} / {sp.get('tw', 0)}")
         col_b.metric("Weight (kg/m)", sp.get("weight", 0))
+
+with st.expander("📚 Common Purlin Section Types Used in IS-Based Design", expanded=False):
+    st.markdown(
+        "The calculation module currently designs rolled **ISMB**, **ISLB**, and **ISMC** "
+        "sections from the project database. The table below also documents other common "
+        "purlin families and cross-section shapes used in IS-based roof framing so "
+        "designers can distinguish calculable rolled sections from guidance-only alternatives."
+    )
+    st.dataframe(
+        pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(columns={
+            "type": "Section Type",
+            "shape": "Common Shape",
+            "designation": "Common IS / Trade Designation",
+            "examples": "Examples",
+            "typical_use": "Typical Use",
+            "calculation_status": "Calculation Status",
+        }),
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.info(
+        "Angle, hollow/box, and cold-formed C/Z purlins are listed as common practice guidance only. "
+        "Add verified section properties and the relevant design checks before using them "
+        "as selectable calculation sections."
+    )
 
 # ── Run Calculation ────────────────────────────────────────────────────────
 if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):
