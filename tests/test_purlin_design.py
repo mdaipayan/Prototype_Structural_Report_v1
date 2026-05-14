@@ -1,7 +1,9 @@
 import math
 import unittest
 
-from utils.pdf_report import generate_purlin_pdf
+from reportlab.platypus import CondPageBreak
+
+from utils.pdf_report import _section_heading, _styles, _subheading, generate_purlin_pdf
 from utils.purlin_calc import run_purlin_design
 from utils.sections import (
     COLD_FORMED_C,
@@ -99,6 +101,16 @@ class PurlinDesignTests(unittest.TestCase):
                     self.assertIn("distortional_ok", cold_checks["checks"])
                 else:
                     self.assertIn("gross-section", result["design_standard"])
+
+    def test_pdf_topic_headers_request_page_break_space(self):
+        styles = _styles()
+        section_flowables = _section_heading("TEST SECTION", styles)
+        subheading_flowables = _subheading("Test Subheading", styles)
+
+        self.assertIsInstance(section_flowables[0], CondPageBreak)
+        self.assertIsInstance(subheading_flowables[0], CondPageBreak)
+        self.assertTrue(styles["h1"].keepWithNext)
+        self.assertTrue(styles["h2"].keepWithNext)
 
     def test_pdf_report_generation_uses_calculation_output(self):
         result = run_purlin_design(self.input_data)

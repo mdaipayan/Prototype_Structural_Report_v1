@@ -19,6 +19,7 @@ from reportlab.platypus import (
     Table,
     TableStyle,
     HRFlowable,
+    CondPageBreak,
 )
 
 # ── Colour Palette ──────────────────────────────────────────────────────────
@@ -109,6 +110,7 @@ def _styles():
         textColor=WHITE,
         spaceAfter=4,
         spaceBefore=8,
+        keepWithNext=1,
         leftIndent=0,
         backColor=DARK_BLUE,
         borderPad=5,
@@ -122,6 +124,7 @@ def _styles():
         textColor=DARK_BLUE,
         spaceBefore=8,
         spaceAfter=3,
+        keepWithNext=1,
         borderPad=3,
         borderColor=MID_BLUE,
         borderWidth=0,
@@ -264,11 +267,15 @@ def _header_table(title: str, subtitle: str, project: str, date_str: str, s: dic
 
 
 def _section_heading(text: str, s: dict):
-    return [Paragraph(f"  {text}", s["h1"]), Spacer(1, 3)]
+    # Avoid orphaned topic headers at the bottom of a page.  If there is not
+    # enough room for the header plus the first few lines of content, move the
+    # header to the next page before it is drawn.
+    return [CondPageBreak(30 * mm), Paragraph(f"  {text}", s["h1"]), Spacer(1, 3)]
 
 
 def _subheading(text: str, s: dict):
-    return [Paragraph(text, s["h2"])]
+    # Keep table/formula subheadings from being stranded at page breaks.
+    return [CondPageBreak(20 * mm), Paragraph(text, s["h2"])]
 
 
 def _input_table(rows: list, s: dict, title: str = ""):
