@@ -272,6 +272,15 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertIn(b"REFERENCES", decoded_pages[-1])
         self.assertGreater(decoded_pages[-1].count(b" Tj"), 20)
 
+    def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
+        result = run_purlin_design(self.input_data)
+        pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
+        decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
+
+        self.assertGreaterEqual(len(decoded_pages), 1)
+        self.assertIn(b"REFERENCES", decoded_pages[-1])
+        self.assertGreater(decoded_pages[-1].count(b" Tj"), 20)
+
 
 if __name__ == "__main__":
     unittest.main()
