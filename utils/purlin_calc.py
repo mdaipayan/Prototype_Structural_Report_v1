@@ -434,6 +434,126 @@ def _bolt_lap_design(
     }
 
 
+def _economy_prediction(
+    current_result: dict[str, Any],
+    base_input: dict[str, Any],
+    candidate_sections: dict[str, dict[str, dict[str, Any]]],
+    max_recommendations: int = 5,
+) -> dict[str, Any]:
+    """Rank safe section alternatives by weight using a transparent AI-style heuristic.
+
+    This is intentionally deterministic and local: it does not call an external
+    model/API.  The score favours low self-weight, adequate-but-not-excessive
+    utilisation, and designs that pass every existing calculation check.
+    """
+    current_weight = _as_float(current_result.get("section_props", {}).get("weight"))
+    current_safe = current_result.get("overall_status") == "SAFE"
+
+    candidates: list[dict[str, Any]] = []
+    for family_label, sections in (candidate_sections or {}).items():
+        if not isinstance(sections, dict):
+            continue
+        for name, props in sections.items():
+            if not isinstance(props, dict):
+                continue
+            trial_input = dict(base_input)
+            trial_input.update(
+                {
+                    "section_name": name,
+                    "section_props": props,
+                    "candidate_sections": {},
+                    "include_economy_prediction": False,
+                }
+            )
+            trial = run_purlin_design(trial_input)
+            if trial.get("overall_status") != "SAFE":
+                continue
+
+            weight = _as_float(props.get("weight"))
+            governing_utilisation = max(
+                _as_float(trial.get("biaxial_ratio")),
+                _as_float(trial.get("shear_ratio")),
+                _as_float(trial.get("defl_ratio")),
+                _as_float(trial.get("stability_checks", {}).get("uplift_ratio")),
+                _as_float(trial.get("lap_design", {}).get("bolt_utilisation")),
+            )
+            # Economic purlins usually sit close to, but below, unity utilisation.
+            # Penalise very under-utilised heavy choices and any zero/invalid weights.
+            utilisation_fit = 1.0 - min(
+                abs(0.85 - governing_utilisation) / 0.85, 1.0
+            )
+            score = (
+                (1000.0 / weight if weight > 0 else 0.0)
+                + 10.0 * utilisation_fit
+            )
+            candidates.append(
+                {
+                    "section_name": name,
+                    "section_family": family_label,
+                    "weight_kg_m": weight,
+                    "overall_status": trial.get("overall_status"),
+                    "governing_utilisation": governing_utilisation,
+                    "biaxial_ratio": _as_float(trial.get("biaxial_ratio")),
+                    "shear_ratio": _as_float(trial.get("shear_ratio")),
+                    "defl_ratio": _as_float(trial.get("defl_ratio")),
+                    "score": score,
+                    "weight_saving_percent": (
+                        (current_weight - weight) / current_weight * 100.0
+                        if current_weight > 0
+                        else 0.0
+                    ),
+                }
+            )
+
+    candidates.sort(
+        key=lambda item: (item["weight_kg_m"], -item["governing_utilisation"])
+    )
+    recommendations = candidates[:max(1, int(max_recommendations))]
+    best = recommendations[0] if recommendations else None
+
+    if not best:
+        verdict = "No safe alternative found in the selected candidate database."
+        economical = False
+    elif not current_safe:
+        verdict = (
+            f"Current section is unsafe. Use {best['section_name']} "
+            f"({best['weight_kg_m']:.1f} kg/m) or a heavier safe alternative."
+        )
+        economical = False
+    elif best["section_name"] == current_result.get("section_name"):
+        verdict = "Current section is the lightest safe option in the checked database."
+        economical = True
+    elif best["weight_kg_m"] < current_weight:
+        verdict = (
+            f"Current section is safe but not the most economical. "
+            f"{best['section_name']} is predicted more economical with "
+            f"{best['weight_saving_percent']:.1f}% lower self-weight."
+        )
+        economical = False
+    else:
+        verdict = "Current section is safe and no lighter safe alternative was found."
+        economical = True
+
+    return {
+        "method": (
+            "Local AI-style economy predictor: exhaustive section scan + deterministic "
+            "weight/utilisation scoring; no external AI/API call."
+        ),
+        "current_section": current_result.get("section_name"),
+        "current_weight_kg_m": current_weight,
+        "current_safe": current_safe,
+        "current_economical": economical,
+        "best_section": best,
+        "recommendations": recommendations,
+        "safe_candidate_count": len(candidates),
+        "verdict": verdict,
+        "note": (
+            "Prediction is a preliminary material-weight optimisation. Final selection "
+            "must also consider availability, erection, connection detailing, bracing, "
+            "transport, corrosion allowance, and project procurement costs."
+        ),
+    }
+
 def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     """Run purlin design checks and return all values needed by UI/PDF.
 
@@ -607,7 +727,7 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     overall_status = "SAFE" if all(checks_ok) else "UNSAFE"
 
     wz_values = list(signed_combos.values())
-    return {
+    result = {
         "status": "Purlin calculations complete.",
         "overall_status": overall_status,
         "section_name": inp.get("section_name", "Unknown Section"),
@@ -679,3 +799,15 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         "defl_ok": defl_ok,
         "lap_design": lap_design,
     }
+
+    if _as_bool(inp.get("include_economy_prediction"), True):
+        result["economy_prediction"] = _economy_prediction(
+            result,
+            inp,
+            inp.get("candidate_sections") or {},
+            _as_float(inp.get("economy_max_recommendations"), 5),
+        )
+    else:
+        result["economy_prediction"] = {}
+
+    return result

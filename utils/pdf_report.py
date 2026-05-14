@@ -929,6 +929,44 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
             s,
         )
 
+    # ── AI Economy Predictor ────────────────────────────────
+    economy = r.get("economy_prediction", {})
+    if economy.get("recommendations"):
+        story += _section_heading("11.  AI ECONOMY PREDICTOR — SAFE SECTION OPTIONS", s)
+        story += _formula_block(
+            f"Method: {economy.get('method', 'Local deterministic economy scan')}\n\n"
+            f"Verdict: {economy.get('verdict', '')}\n\n"
+            f"Current section = {economy.get('current_section', r.get('section_name', ''))}, "
+            f"weight = {economy.get('current_weight_kg_m', 0.0):.1f} kg/m\n"
+            f"Safe candidates found = {economy.get('safe_candidate_count', 0)}\n\n"
+            f"Note: {economy.get('note', '')}",
+            s,
+            "Material-weight optimisation based on the same design checks in this report",
+        )
+        econ_rows = [
+            [
+                f"Rank {idx}",
+                (
+                    f"{item.get('section_name', '')} ({item.get('section_family', '')}) — "
+                    f"{item.get('weight_kg_m', 0.0):.1f} kg/m, "
+                    f"governing util. {item.get('governing_utilisation', 0.0):.3f}, "
+                    f"saving {item.get('weight_saving_percent', 0.0):.1f}%"
+                ),
+            ]
+            for idx, item in enumerate(economy.get("recommendations", [])[:5], start=1)
+        ]
+        story += _input_table(
+            econ_rows,
+            s,
+            "11.1  Top Safe Economical Alternatives",
+        )
+        story += _result_box(
+            "Economy prediction for selected section",
+            "ECONOMICAL" if economy.get("current_economical") else "REVIEW / OPTIMISE",
+            bool(economy.get("current_economical")),
+            s,
+        )
+
     # ── Overall Verdict ─────────────────────────────────────
     story += _overall_verdict(r["overall_status"], s)
 

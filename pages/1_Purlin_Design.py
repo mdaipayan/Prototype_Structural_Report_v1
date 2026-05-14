@@ -351,6 +351,8 @@ current_input = {
     "dead_load_excludes_self_weight": dead_load_excludes_self_weight,
     "top_flange_restrained": top_flange_restrained,
     "bottom_flange_restrained": bottom_flange_restrained,
+    "candidate_sections": all_sec_types,
+    "economy_max_recommendations": 5,
 }
 
 
@@ -852,6 +854,71 @@ Group capacity:
         )
     summary = pd.DataFrame(summary_rows)
     st.dataframe(summary.set_index("Check"), use_container_width=True)
+
+    # ── AI Economy Predictor ───────────────────────────────────
+    st.divider()
+    st.markdown("### 🤖 AI Economy Predictor — Safe & Economical Section")
+    economy = r.get("economy_prediction", {})
+    if economy.get("recommendations"):
+        if economy.get("current_economical"):
+            st.success(economy.get("verdict", "Current section is economical."))
+        else:
+            st.warning(
+                economy.get("verdict", "A lighter safe option may be available.")
+            )
+
+        best = economy.get("best_section") or {}
+        ai_cols = st.columns(4)
+        ai_cols[0].metric("Best Safe Section", best.get("section_name", "—"))
+        ai_cols[1].metric("Best Weight", f"{best.get('weight_kg_m', 0):.1f} kg/m")
+        ai_cols[2].metric(
+            "Current Weight", f"{economy.get('current_weight_kg_m', 0):.1f} kg/m"
+        )
+        ai_cols[3].metric("Safe Candidates", economy.get("safe_candidate_count", 0))
+
+        rec_df = pd.DataFrame(economy.get("recommendations", []))
+        rec_df = rec_df.rename(
+            columns={
+                "section_name": "Section",
+                "section_family": "Family",
+                "weight_kg_m": "Weight (kg/m)",
+                "governing_utilisation": "Governing Util.",
+                "biaxial_ratio": "Biaxial",
+                "shear_ratio": "Shear",
+                "defl_ratio": "Deflection",
+                "weight_saving_percent": "Weight Saving vs Current (%)",
+            }
+        )
+        show_cols = [
+            "Section",
+            "Family",
+            "Weight (kg/m)",
+            "Governing Util.",
+            "Biaxial",
+            "Shear",
+            "Deflection",
+            "Weight Saving vs Current (%)",
+        ]
+        st.dataframe(
+            rec_df[show_cols].style.format(
+                {
+                    "Weight (kg/m)": "{:.1f}",
+                    "Governing Util.": "{:.3f}",
+                    "Biaxial": "{:.3f}",
+                    "Shear": "{:.3f}",
+                    "Deflection": "{:.3f}",
+                    "Weight Saving vs Current (%)": "{:.1f}",
+                }
+            ),
+            hide_index=True,
+            use_container_width=True,
+        )
+        st.caption(f"{economy.get('method', '')} {economy.get('note', '')}")
+    else:
+        st.info(
+            "No safe economical alternative was found in the available section database "
+            "for the current loading, restraint, and design-code assumptions."
+        )
 
     # ── PDF Download ───────────────────────────────────────────
     st.divider()

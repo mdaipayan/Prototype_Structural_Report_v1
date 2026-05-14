@@ -15,7 +15,9 @@ from utils.sections import (
     COMMON_PURLIN_SECTION_TYPES,
     HOLLOW_BOX,
     ISA,
+    ISLB,
     ISMB,
+    ISMC,
 )
 
 
@@ -174,6 +176,33 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertFalse(result["stability_checks"]["overall_ok"])
         self.assertEqual(result["overall_status"], "UNSAFE")
 
+    def test_ai_economy_prediction_recommends_lighter_safe_sections(self):
+        data = dict(self.input_data)
+        data["candidate_sections"] = {
+            "ISMB": ISMB,
+            "ISLB": ISLB,
+            "ISMC": ISMC,
+            "ISA": ISA,
+            "Cold C": COLD_FORMED_C,
+            "Cold Z": COLD_FORMED_Z,
+            "Box": HOLLOW_BOX,
+        }
+
+        result = run_purlin_design(data)
+        economy = result["economy_prediction"]
+
+        self.assertFalse(economy["current_economical"])
+        self.assertIn("not the most economical", economy["verdict"])
+        self.assertGreater(economy["safe_candidate_count"], 0)
+        self.assertLess(
+            economy["best_section"]["weight_kg_m"],
+            result["section_props"]["weight"],
+        )
+        self.assertEqual(
+            economy["recommendations"],
+            sorted(economy["recommendations"], key=lambda item: item["weight_kg_m"]),
+        )
+
     def test_common_purlin_section_guidance_lists_is_based_families(self):
         designations = {item["designation"] for item in COMMON_PURLIN_SECTION_TYPES}
         section_types = {item["type"] for item in COMMON_PURLIN_SECTION_TYPES}
@@ -277,7 +306,9 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(styles["h2"].keepWithNext)
 
     def test_pdf_report_generation_uses_calculation_output(self):
-        result = run_purlin_design(self.input_data)
+        data = dict(self.input_data)
+        data["candidate_sections"] = {"ISMB": ISMB, "ISLB": ISLB, "Cold Z": COLD_FORMED_Z}
+        result = run_purlin_design(data)
         pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
 
         decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
@@ -287,6 +318,8 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(any(b"12.37" in page for page in decoded_pages))
         self.assertTrue(any(b"Self-weight note" in page for page in decoded_pages))
         self.assertTrue(any(b"LTB" in page for page in decoded_pages))
+        self.assertTrue(any(b"AI ECONOMY PREDICTOR" in page for page in decoded_pages))
+        self.assertTrue(any(b"Top Safe Economical Alternatives" in page for page in decoded_pages))
 
     def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
         result = run_purlin_design(self.input_data)
