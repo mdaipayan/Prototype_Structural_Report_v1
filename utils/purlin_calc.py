@@ -77,6 +77,168 @@ def _section_classification(sp: dict[str, Any], fy: float) -> dict[str, Any]:
     }
 
 
+COLD_FORMED_FAMILIES = {"Cold-formed C-sections", "Cold-formed Z-sections"}
+
+
+def _clamp(value: float, lower: float, upper: float) -> float:
+    return max(lower, min(value, upper))
+
+
+def _effective_plate(
+    width_mm: float, thickness_mm: float, fy: float, k: float
+) -> dict[str, float]:
+    """Return Winter-style effective-width data for a cold-formed plate element."""
+    E = 2.0e5
+    nu = 0.3
+    width = max(width_mm, 0.0)
+    thickness = max(thickness_mm, 0.0)
+    if width <= 0 or thickness <= 0 or fy <= 0 or k <= 0:
+        return {
+            "flat_width": width,
+            "ratio": math.inf,
+            "fcr": 0.0,
+            "lambda": math.inf,
+            "rho": 0.0,
+            "effective_width": 0.0,
+        }
+
+    ratio = width / thickness
+    fcr = k * math.pi**2 * E / (12.0 * (1.0 - nu**2) * ratio**2)
+    slenderness = math.sqrt(fy / fcr) if fcr > 0 else math.inf
+    rho = 1.0 if slenderness <= 0.673 else (1.0 - 0.22 / slenderness) / slenderness
+    rho = _clamp(rho, 0.0, 1.0)
+    return {
+        "flat_width": width,
+        "ratio": ratio,
+        "fcr": fcr,
+        "lambda": slenderness,
+        "rho": rho,
+        "effective_width": rho * width,
+    }
+
+
+def _cold_formed_design_checks(
+    sp: dict[str, Any],
+    fy: float,
+    gm0: float,
+    Mz_kNm: float,
+    My_kNm: float,
+    Vz_kN: float,
+    service_w: float,
+    L_mm: float,
+) -> dict[str, Any]:
+    """Cold-formed lipped C/Z effective-width and stability checks.
+
+    The implementation uses gross flat-element geometry from the local database,
+    Winter-style effective widths for local buckling, web shear buckling stress,
+    lip geometry limits for distortional stability screening, web-crippling
+    reaction capacity at end supports, and effective inertia for serviceability.
+    """
+    h = _as_float(sp.get("h"))
+    b = _as_float(sp.get("bf"))
+    lip = _as_float(sp.get("lip"))
+    t = _as_float(sp.get("tw"), _as_float(sp.get("tf"), 0.0))
+    area_gross_mm2 = _as_float(sp.get("Area")) * 100.0
+    av_mm2 = _as_float(sp.get("Av"), h * t)
+
+    web = _effective_plate(max(h - 2.0 * t, 0.0), t, fy, 4.0)
+    flange = _effective_plate(max(b - t, 0.0), t, fy, 4.0)
+    lip_plate = _effective_plate(lip, t, fy, 0.43)
+
+    area_eff_mm2 = (
+        web["effective_width"] * t
+        + 2.0 * flange["effective_width"] * t
+        + 2.0 * lip_plate["effective_width"] * t
+    )
+    area_eff_ratio = _clamp(_safe_ratio(area_eff_mm2, area_gross_mm2), 0.20, 1.0)
+
+    # Lipped C/Z purlins are thin-walled; use effective elastic section modulus.
+    zxx_eff = _as_float(sp.get("Zxx")) * area_eff_ratio
+    zyy_eff = _as_float(sp.get("Zyy")) * area_eff_ratio
+    ixx_eff = _as_float(sp.get("Ixx")) * max(area_eff_ratio, 0.25)
+
+    Mdz_eff = zxx_eff * fy / (gm0 * 1000.0) if gm0 else 0.0
+    Mdy_eff = zyy_eff * fy / (gm0 * 1000.0) if gm0 else 0.0
+    bending_ratio = _safe_ratio(My_kNm, Mdy_eff) + _safe_ratio(Mz_kNm, Mdz_eff)
+
+    web_ratio = _safe_ratio(max(h - 2.0 * t, 0.0), t)
+    shear_k = 5.34
+    tau_cr = (
+        shear_k * math.pi**2 * 2.0e5 / (12.0 * (1.0 - 0.3**2) * web_ratio**2)
+        if math.isfinite(web_ratio) and web_ratio > 0
+        else 0.0
+    )
+    tau_design = min(0.60 * fy, tau_cr)
+    Vd_shear = av_mm2 * tau_design / (gm0 * 1000.0) if gm0 else 0.0
+    shear_ratio = _safe_ratio(Vz_kN, Vd_shear)
+
+    bearing_length = max(50.0, min(b, 100.0))
+    web_crippling_capacity = (
+        t**2
+        * fy
+        * (10.0 + 1.5 * bearing_length / max(t, 1.0))
+        * (1.0 + 0.002 * web_ratio)
+        / (gm0 * 1000.0)
+        if gm0
+        else 0.0
+    )
+    web_crippling_ratio = _safe_ratio(Vz_kN, web_crippling_capacity)
+
+    flange_ratio = _safe_ratio(max(b - t, 0.0), t)
+    lip_ratio = _safe_ratio(lip, t)
+    lip_to_flange = _safe_ratio(lip, b)
+    slenderness_ok = web_ratio <= 200.0 and flange_ratio <= 60.0 and lip_ratio <= 30.0
+    distortional_ok = 0.20 <= lip_to_flange <= 0.60 and lip_ratio <= 30.0
+
+    E = 2.0e5
+    ixx_eff_mm4 = ixx_eff * 1.0e4
+    delta_eff = (
+        5.0 * service_w * L_mm**4 / (384.0 * E * ixx_eff_mm4)
+        if ixx_eff_mm4 > 0
+        else math.inf
+    )
+
+    checks = {
+        "local_buckling_ok": area_eff_ratio >= 0.35 and slenderness_ok,
+        "distortional_ok": distortional_ok,
+        "effective_width_bending_ok": bending_ratio <= 1.0,
+        "shear_buckling_ok": shear_ratio <= 1.0,
+        "web_crippling_ok": web_crippling_ratio <= 1.0,
+        "serviceability_ok": math.isfinite(delta_eff),
+    }
+    checks["overall_ok"] = all(checks.values())
+
+    return {
+        "is_cold_formed": True,
+        "method": "IS 801 / effective-width cold-formed member checks",
+        "web": web,
+        "flange": flange,
+        "lip": lip_plate,
+        "area_gross_mm2": area_gross_mm2,
+        "area_eff_mm2": area_eff_mm2,
+        "area_eff_ratio": area_eff_ratio,
+        "Zxx_eff": zxx_eff,
+        "Zyy_eff": zyy_eff,
+        "Ixx_eff": ixx_eff,
+        "Mdz_eff_kNm": Mdz_eff,
+        "Mdy_eff_kNm": Mdy_eff,
+        "bending_ratio": bending_ratio,
+        "tau_cr_MPa": tau_cr,
+        "tau_design_MPa": tau_design,
+        "Vd_shear_kN": Vd_shear,
+        "shear_ratio": shear_ratio,
+        "bearing_length_mm": bearing_length,
+        "web_crippling_capacity_kN": web_crippling_capacity,
+        "web_crippling_ratio": web_crippling_ratio,
+        "web_slenderness": web_ratio,
+        "flange_slenderness": flange_ratio,
+        "lip_slenderness": lip_ratio,
+        "lip_to_flange": lip_to_flange,
+        "delta_eff_mm": delta_eff,
+        "checks": checks,
+    }
+
+
 def _safe_ratio(numerator: float, denominator: float) -> float:
     if denominator <= 0:
         return math.inf if numerator > 0 else 0.0
@@ -144,28 +306,56 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     z_major = _as_float(sp.get("Zpx" if use_plastic else "Zxx"))
     z_minor = _as_float(sp.get("Zpy" if use_plastic else "Zyy"))
 
+    E = 2.0e5  # MPa = N/mm²
+    L_mm = span_m * 1000.0
+    service_w = wz_DL + wz_LL  # kN/m == N/mm
+    cold_formed = sp.get("section_family") in COLD_FORMED_FAMILIES
+    cold_formed_checks: dict[str, Any] = {}
+
     Mdz_kNm = z_major * fy / (gm0 * 1000.0) if gm0 else 0.0
     Mdy_kNm = z_minor * fy / (gm0 * 1000.0) if gm0 else 0.0
     biaxial_ratio = _safe_ratio(My_kNm, Mdy_kNm) + _safe_ratio(Mz_kNm, Mdz_kNm)
-    biaxial_ok = biaxial_ratio <= 1.0 and cls["overall"] != "Slender"
 
     Av_mm2 = _as_float(sp.get("Av"), _as_float(sp.get("h")) * _as_float(sp.get("tw")))
     Vd_kN = Av_mm2 * fy / (math.sqrt(3.0) * gm0 * 1000.0) if gm0 else 0.0
     shear_ratio = _safe_ratio(Vz_kN, Vd_kN)
+    Ixx_design_cm4 = _as_float(sp.get("Ixx"))
+
+    if cold_formed:
+        cold_formed_checks = _cold_formed_design_checks(
+            sp, fy, gm0, Mz_kNm, My_kNm, Vz_kN, service_w, L_mm
+        )
+        use_plastic = False
+        z_major = cold_formed_checks["Zxx_eff"]
+        z_minor = cold_formed_checks["Zyy_eff"]
+        Mdz_kNm = cold_formed_checks["Mdz_eff_kNm"]
+        Mdy_kNm = cold_formed_checks["Mdy_eff_kNm"]
+        biaxial_ratio = cold_formed_checks["bending_ratio"]
+        Vd_kN = cold_formed_checks["Vd_shear_kN"]
+        shear_ratio = cold_formed_checks["shear_ratio"]
+        Ixx_design_cm4 = cold_formed_checks["Ixx_eff"]
+
+    biaxial_ok = biaxial_ratio <= 1.0 and cls["overall"] != "Slender"
     shear_ok = shear_ratio <= 1.0
 
-    E = 2.0e5  # MPa = N/mm²
-    L_mm = span_m * 1000.0
-    Ixx_mm4 = _as_float(sp.get("Ixx")) * 1.0e4
-    service_w = wz_DL + wz_LL  # kN/m == N/mm
+    Ixx_mm4 = Ixx_design_cm4 * 1.0e4
     delta_max_mm = (
         (5.0 * service_w * L_mm**4 / (384.0 * E * Ixx_mm4)) if Ixx_mm4 else math.inf
     )
+    if cold_formed and cold_formed_checks:
+        cold_formed_checks["delta_eff_mm"] = delta_max_mm
     delta_limit_mm = L_mm / 180.0
     defl_ratio = _safe_ratio(delta_max_mm, delta_limit_mm)
     defl_ok = defl_ratio <= 1.0
+    if cold_formed and cold_formed_checks:
+        cold_formed_checks["checks"]["serviceability_ok"] = defl_ok
+        cold_formed_checks["checks"]["overall_ok"] = all(
+            cold_formed_checks["checks"].values()
+        )
 
     checks_ok = [biaxial_ok, shear_ok, defl_ok, cls["overall"] != "Slender"]
+    if cold_formed:
+        checks_ok.append(bool(cold_formed_checks.get("checks", {}).get("overall_ok")))
     overall_status = "SAFE" if all(checks_ok) else "UNSAFE"
 
     wz_values = list(signed_combos.values())
@@ -213,6 +403,10 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         "design_standard": sp.get("design_standard", "IS 800:2007 gross-section check"),
         "design_note": sp.get("design_note", ""),
         "use_plastic_modulus": use_plastic,
+        "cold_formed_checks": cold_formed_checks,
+        "z_major_design": z_major,
+        "z_minor_design": z_minor,
+        "Ixx_design_cm4": Ixx_design_cm4,
         "Mdz_kNm": Mdz_kNm,
         "Mdy_kNm": Mdy_kNm,
         "biaxial_ratio": biaxial_ratio,

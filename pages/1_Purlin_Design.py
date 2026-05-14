@@ -235,9 +235,9 @@ st.dataframe(
     key="common_purlin_section_types_table",
 )
 st.info(
-    "Cold-formed C/Z and angle entries use gross-section preliminary properties; "
-    "verify effective-width, local/distortional buckling, connection eccentricity, "
-    "and manufacturer data before issuing final construction design."
+    "Cold-formed C/Z entries include effective-width, shear-buckling, web-crippling, "
+    "distortional-geometry, and deflection checks. Angle entries remain gross-section "
+    "checks and require connection eccentricity verification."
 )
 
 
@@ -396,7 +396,7 @@ Vy  =  wy,d × L / 2  =  {r["wy_d"]:.4f} × {span:.2f} / 2  =  {r["Vy_kN"]:.4f} 
 
     # ── Step 4: Moment Capacity ────────────────────────────────
     with st.expander("📌 Step 4 — Design Moment Capacity  [IS 800:2007 Cl. 8.2.1]"):
-        if overall_class in ("Plastic", "Compact"):
+        if r.get("use_plastic_modulus"):
             st.markdown(
                 f"""
 <div class="formula-box">
@@ -417,8 +417,8 @@ Mdy  =  βb × Zpy × fy / γm0  =  1.0 × {sp.get("Zpy", 0):.2f} cm³ × {r["fy
 <div class="formula-box">
 Semi-compact section → use elastic section modulus
 
-Mdz  =  Zxx × fy / γm0  =  {sp.get("Zxx", 0):.2f} × {r["fy"]:.0f} / ({r["gm0"]:.2f} × 1000)  =  {r["Mdz_kNm"]:.4f} kNm
-Mdy  =  Zyy × fy / γm0  =  {sp.get("Zyy", 0):.2f} × {r["fy"]:.0f} / ({r["gm0"]:.2f} × 1000)  =  {r["Mdy_kNm"]:.4f} kNm
+Mdz  =  Zx,design × fy / γm0  =  {r.get("z_major_design", sp.get("Zxx", 0)):.2f} × {r["fy"]:.0f} / ({r["gm0"]:.2f} × 1000)  =  {r["Mdz_kNm"]:.4f} kNm
+Mdy  =  Zy,design × fy / γm0  =  {r.get("z_minor_design", sp.get("Zyy", 0)):.2f} × {r["fy"]:.0f} / ({r["gm0"]:.2f} × 1000)  =  {r["Mdy_kNm"]:.4f} kNm
 </div>
 """,
                 unsafe_allow_html=True,
@@ -451,13 +451,23 @@ My / Mdy  +  Mz / Mdz  ≤  1.0
 
     # ── Step 6: Shear ──────────────────────────────────────────
     with st.expander("📌 Step 6 — Shear Capacity Check  [IS 800:2007 Cl. 8.4.1]"):
+        cf = r.get("cold_formed_checks") or {}
+        if cf:
+            shear_capacity_text = (
+                f"Vd = Av × τdesign / γm0 = {r['Av_mm2']:.0f} × "
+                f"{cf['tau_design_MPa']:.2f} / ({r['gm0']:.2f} × 1000) = {r['Vd_kN']:.4f} kN"
+            )
+        else:
+            shear_capacity_text = (
+                f"Vd = Av × fy / (√3 × γm0) = {r['Av_mm2']:.0f} × {r['fy']:.0f} / "
+                f"(√3 × {r['gm0']:.2f} × 1000) = {r['Vd_kN']:.4f} kN"
+            )
         st.markdown(
             f"""
 <div class="formula-box">
 Shear area:  Av  =  h × tw  =  {sp.get("h", 0)} × {sp.get("tw", 0)}  =  {r["Av_mm2"]:.0f} mm²
 
-Vd  =  Av × fy / (√3 × γm0)  =  {r["Av_mm2"]:.0f} × {r["fy"]:.0f} / (√3 × {r["gm0"]:.2f} × 1000)
-    =  {r["Vd_kN"]:.4f} kN
+{shear_capacity_text}
 
 Vz (applied)  =  {r["Vz_kN"]:.4f} kN
 </div>
@@ -476,6 +486,67 @@ Vz (applied)  =  {r["Vz_kN"]:.4f} kN
                 unsafe_allow_html=True,
             )
 
+    if r.get("cold_formed_checks"):
+        cf = r["cold_formed_checks"]
+        cf_checks = cf.get("checks", {})
+        with st.expander("📌 Cold-formed C/Z — Effective-width & Stability Checks"):
+            st.markdown(
+                f"""
+<div class="formula-box">
+Method: {cf.get("method", "Cold-formed effective-width checks")}
+
+Effective widths:
+  Web:    ρ = {cf["web"]["rho"]:.3f}, be = {cf["web"]["effective_width"]:.1f} mm
+  Flange: ρ = {cf["flange"]["rho"]:.3f}, be = {cf["flange"]["effective_width"]:.1f} mm
+  Lip:    ρ = {cf["lip"]["rho"]:.3f}, be = {cf["lip"]["effective_width"]:.1f} mm
+
+Effective section:
+  Aeff / Ag = {cf["area_eff_ratio"]:.3f}
+  Zeff,x = {cf["Zxx_eff"]:.2f} cm³, Zeff,y = {cf["Zyy_eff"]:.2f} cm³
+  Ieff,x = {cf["Ixx_eff"]:.2f} cm⁴
+
+Stability / bearing:
+  τcr = {cf["tau_cr_MPa"]:.2f} MPa, τdesign = {cf["tau_design_MPa"]:.2f} MPa
+  Web crippling capacity = {cf["web_crippling_capacity_kN"]:.3f} kN
+  Lip/flange = {cf["lip_to_flange"]:.3f}
+</div>
+""",
+                unsafe_allow_html=True,
+            )
+            cf_df = pd.DataFrame(
+                {
+                    "Check": [
+                        "Local buckling / effective width",
+                        "Distortional geometry",
+                        "Effective-width bending",
+                        "Shear buckling",
+                        "Web crippling at support",
+                        "Effective-I deflection",
+                    ],
+                    "Status": [
+                        "✅ PASS" if cf_checks.get("local_buckling_ok") else "❌ FAIL",
+                        "✅ PASS" if cf_checks.get("distortional_ok") else "❌ FAIL",
+                        "✅ PASS"
+                        if cf_checks.get("effective_width_bending_ok")
+                        else "❌ FAIL",
+                        "✅ PASS" if cf_checks.get("shear_buckling_ok") else "❌ FAIL",
+                        "✅ PASS" if cf_checks.get("web_crippling_ok") else "❌ FAIL",
+                        "✅ PASS" if cf_checks.get("serviceability_ok") else "❌ FAIL",
+                    ],
+                }
+            )
+            st.dataframe(cf_df.set_index("Check"), use_container_width=True)
+            if cf_checks.get("overall_ok"):
+                st.markdown(
+                    '<div class="result-safe">✓ PASS — cold-formed effective-width and stability checks are satisfied.</div>',
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    '<div class="result-fail">✗ FAIL — one or more cold-formed effective-width/stability checks are not satisfied.</div>',
+                    unsafe_allow_html=True,
+                )
+
     # ── Step 7: Deflection ─────────────────────────────────────
     with st.expander("📌 Step 7 — Deflection Check  [IS 800:2007 Table 6]"):
         st.markdown(
@@ -484,7 +555,7 @@ Vz (applied)  =  {r["Vz_kN"]:.4f} kN
 Service load (unfactored):  wz,ser  =  {r["wz_DL"] + r["wz_LL"]:.4f} N/mm
 
 δ_max  =  5 × wz,ser × L⁴ / (384 × E × Izz)
-       =  5 × {r["wz_DL"] + r["wz_LL"]:.4f} × ({span * 1000:.0f})⁴ / (384 × 2×10⁵ × {sp.get("Ixx", 0):.1f}×10⁴)
+       =  5 × {r["wz_DL"] + r["wz_LL"]:.4f} × ({span * 1000:.0f})⁴ / (384 × 2×10⁵ × {r.get("Ixx_design_cm4", sp.get("Ixx", 0)):.1f}×10⁴)
        =  {r["delta_max_mm"]:.3f} mm
 
 Permissible:  L / 180  =  {span * 1000:.0f} / 180  =  {r["delta_limit_mm"]:.3f} mm
@@ -507,31 +578,41 @@ Permissible:  L / 180  =  {span * 1000:.0f} / 180  =  {r["delta_limit_mm"]:.3f} 
     st.divider()
     st.markdown("### 📊 Design Summary")
 
-    summary = pd.DataFrame(
+    summary_rows = [
         {
-            "Check": ["Biaxial Bending", "Shear Capacity", "Deflection"],
-            "Applied": [
-                f"{r['biaxial_ratio']:.4f}",
-                f"Vz = {r['Vz_kN']:.4f} kN",
-                f"δ = {r['delta_max_mm']:.3f} mm",
-            ],
-            "Capacity": [
-                "1.000",
-                f"Vd = {r['Vd_kN']:.4f} kN",
-                f"L/180 = {r['delta_limit_mm']:.3f} mm",
-            ],
-            "Utilisation (%)": [
-                f"{r['biaxial_ratio'] * 100:.1f}",
-                f"{r.get('shear_ratio', 0) * 100:.1f}",
-                f"{r.get('defl_ratio', 0) * 100:.1f}",
-            ],
-            "Status": [
-                "✅ PASS" if r.get("biaxial_ok") else "❌ FAIL",
-                "✅ PASS" if r.get("shear_ok") else "❌ FAIL",
-                "✅ PASS" if r.get("defl_ok") else "❌ FAIL",
-            ],
-        }
-    )
+            "Check": "Biaxial Bending",
+            "Applied": f"{r['biaxial_ratio']:.4f}",
+            "Capacity": "1.000",
+            "Utilisation (%)": f"{r['biaxial_ratio'] * 100:.1f}",
+            "Status": "✅ PASS" if r.get("biaxial_ok") else "❌ FAIL",
+        },
+        {
+            "Check": "Shear Capacity",
+            "Applied": f"Vz = {r['Vz_kN']:.4f} kN",
+            "Capacity": f"Vd = {r['Vd_kN']:.4f} kN",
+            "Utilisation (%)": f"{r.get('shear_ratio', 0) * 100:.1f}",
+            "Status": "✅ PASS" if r.get("shear_ok") else "❌ FAIL",
+        },
+        {
+            "Check": "Deflection",
+            "Applied": f"δ = {r['delta_max_mm']:.3f} mm",
+            "Capacity": f"L/180 = {r['delta_limit_mm']:.3f} mm",
+            "Utilisation (%)": f"{r.get('defl_ratio', 0) * 100:.1f}",
+            "Status": "✅ PASS" if r.get("defl_ok") else "❌ FAIL",
+        },
+    ]
+    if r.get("cold_formed_checks"):
+        cf_ok = r["cold_formed_checks"].get("checks", {}).get("overall_ok", False)
+        summary_rows.append(
+            {
+                "Check": "Cold-formed effective-width/stability",
+                "Applied": f"Aeff/Ag = {r['cold_formed_checks']['area_eff_ratio']:.3f}",
+                "Capacity": "All CFS checks pass",
+                "Utilisation (%)": "—",
+                "Status": "✅ PASS" if cf_ok else "❌ FAIL",
+            }
+        )
+    summary = pd.DataFrame(summary_rows)
     st.dataframe(summary.set_index("Check"), use_container_width=True)
 
     # ── PDF Download ───────────────────────────────────────────

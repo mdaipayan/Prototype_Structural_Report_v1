@@ -88,7 +88,17 @@ class PurlinDesignTests(unittest.TestCase):
                 self.assertTrue(math.isfinite(result["biaxial_ratio"]))
                 self.assertTrue(math.isfinite(result["defl_ratio"]))
                 self.assertNotEqual(result["section_class"]["overall"], "Slender")
-                self.assertIn("gross-section", result["design_standard"])
+                if section_name.startswith(("CFLC", "CFLZ")):
+                    cold_checks = result["cold_formed_checks"]
+                    self.assertIn("effective-width", result["design_standard"])
+                    self.assertGreater(cold_checks["area_eff_ratio"], 0.0)
+                    self.assertLessEqual(cold_checks["area_eff_ratio"], 1.0)
+                    self.assertGreater(cold_checks["Zxx_eff"], 0.0)
+                    self.assertGreater(cold_checks["Vd_shear_kN"], 0.0)
+                    self.assertIn("web_crippling_ok", cold_checks["checks"])
+                    self.assertIn("distortional_ok", cold_checks["checks"])
+                else:
+                    self.assertIn("gross-section", result["design_standard"])
 
     def test_pdf_report_generation_uses_calculation_output(self):
         result = run_purlin_design(self.input_data)

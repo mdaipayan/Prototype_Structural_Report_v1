@@ -590,12 +590,12 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
             Spacer(1, 3),
         ]
         story += _formula_block(
-            f"Mdz  =  Zxx × fy / γm0  =  {sp['Zxx']:.2f} × {r['fy']:.0f} / "
+            f"Mdz  =  Zx,design × fy / γm0  =  {r.get('z_major_design', sp['Zxx']):.2f} × {r['fy']:.0f} / "
             f"({r['gm0']:.2f} × 1000)  =  {r['Mdz_kNm']:.4f} kNm",
             s,
         )
         story += _formula_block(
-            f"Mdy  =  Zyy × fy / γm0  =  {sp['Zyy']:.2f} × {r['fy']:.0f} / "
+            f"Mdy  =  Zy,design × fy / γm0  =  {r.get('z_minor_design', sp['Zyy']):.2f} × {r['fy']:.0f} / "
             f"({r['gm0']:.2f} × 1000)  =  {r['Mdy_kNm']:.4f} kNm",
             s,
         )
@@ -622,12 +622,22 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         s,
         "IS 800 Cl. 8.4.1",
     )
-    story += _formula_block(
-        f"Vd  =  Av × fy / (√3 × γm0)  =  "
-        f"{r['Av_mm2']:.0f} × {r['fy']:.0f} / (√3 × {r['gm0']:.2f} × 1000)  =  "
-        f"{r['Vd_kN']:.4f} kN",
-        s,
-    )
+    if r.get("cold_formed_checks"):
+        cf = r["cold_formed_checks"]
+        story += _formula_block(
+            f"Vd  =  Av × τdesign / γm0  =  "
+            f"{r['Av_mm2']:.0f} × {cf['tau_design_MPa']:.2f} / ({r['gm0']:.2f} × 1000)  =  "
+            f"{r['Vd_kN']:.4f} kN",
+            s,
+            "IS 801 shear buckling check",
+        )
+    else:
+        story += _formula_block(
+            f"Vd  =  Av × fy / (√3 × γm0)  =  "
+            f"{r['Av_mm2']:.0f} × {r['fy']:.0f} / (√3 × {r['gm0']:.2f} × 1000)  =  "
+            f"{r['Vd_kN']:.4f} kN",
+            s,
+        )
     story += _result_box(
         f"Shear Check  Vz = {r['Vz_kN']:.4f} kN  ≤  Vd = {r['Vd_kN']:.4f} kN",
         f"{r['Vz_kN']:.4f} / {r['Vd_kN']:.4f} = {r['Vz_kN'] / r['Vd_kN']:.4f}",
@@ -640,7 +650,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     story += _formula_block(
         f"δ_max  =  5 w L⁴ / (384 E I)  =  "
         f"5 × {(r['wz_DL'] + r['wz_LL']):.4f} × ({r['span_m'] * 1000:.0f})⁴ / "
-        f"(384 × 2×10⁵ × {sp['Ixx']:.1f}×10⁴)  =  {r['delta_max_mm']:.3f} mm",
+        f"(384 × 2×10⁵ × {r.get('Ixx_design_cm4', sp['Ixx']):.1f}×10⁴)  =  {r['delta_max_mm']:.3f} mm",
         s,
         "IS 800 Table 6",
     )
@@ -657,6 +667,61 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         s,
     )
 
+    if r.get("cold_formed_checks"):
+        cf = r["cold_formed_checks"]
+        cf_checks = cf.get("checks", {})
+        story += _section_heading(
+            "9.  COLD-FORMED EFFECTIVE-WIDTH & STABILITY CHECKS", s
+        )
+        story += _formula_block(
+            f"Method: {cf.get('method', 'IS 801 effective-width checks')}\n\n"
+            f"Effective widths:\n"
+            f"  Web    ρ = {cf['web']['rho']:.3f}, be = {cf['web']['effective_width']:.1f} mm\n"
+            f"  Flange ρ = {cf['flange']['rho']:.3f}, be = {cf['flange']['effective_width']:.1f} mm\n"
+            f"  Lip    ρ = {cf['lip']['rho']:.3f}, be = {cf['lip']['effective_width']:.1f} mm\n\n"
+            f"Aeff / Ag = {cf['area_eff_ratio']:.3f}\n"
+            f"Zeff,x = {cf['Zxx_eff']:.2f} cm³, Zeff,y = {cf['Zyy_eff']:.2f} cm³\n"
+            f"Ieff,x = {cf['Ixx_eff']:.2f} cm⁴\n\n"
+            f"τcr = {cf['tau_cr_MPa']:.2f} MPa, τdesign = {cf['tau_design_MPa']:.2f} MPa\n"
+            f"Web crippling capacity = {cf['web_crippling_capacity_kN']:.3f} kN\n"
+            f"Lip/flange = {cf['lip_to_flange']:.3f}",
+            s,
+            "IS 801 effective-width cold-formed member checks",
+        )
+        cf_rows = [
+            [
+                "Local buckling / effective width",
+                "PASS" if cf_checks.get("local_buckling_ok") else "FAIL",
+            ],
+            [
+                "Distortional geometry",
+                "PASS" if cf_checks.get("distortional_ok") else "FAIL",
+            ],
+            [
+                "Effective-width bending",
+                "PASS" if cf_checks.get("effective_width_bending_ok") else "FAIL",
+            ],
+            [
+                "Shear buckling",
+                "PASS" if cf_checks.get("shear_buckling_ok") else "FAIL",
+            ],
+            [
+                "Web crippling at support",
+                "PASS" if cf_checks.get("web_crippling_ok") else "FAIL",
+            ],
+            [
+                "Effective-I deflection",
+                "PASS" if cf_checks.get("serviceability_ok") else "FAIL",
+            ],
+        ]
+        story += _input_table(cf_rows, s, "9.1  Cold-formed Check Summary")
+        story += _result_box(
+            "Cold-formed effective-width/stability checks",
+            "PASS" if cf_checks.get("overall_ok") else "FAIL",
+            bool(cf_checks.get("overall_ok")),
+            s,
+        )
+
     # ── Overall Verdict ─────────────────────────────────────
     story += _overall_verdict(r["overall_status"], s)
 
@@ -668,6 +733,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         "IS 875 (Part 2):1987 — Code of Practice for Design Loads: Imposed Loads, BIS",
         "IS 875 (Part 3):2015 — Code of Practice for Design Loads: Wind Loads, BIS",
         "SP 6(1):1964 — Handbook for Structural Engineers, Structural Steel Sections, BIS",
+        "IS 801:1975 — Code of Practice for Use of Cold-Formed Light Gauge Steel Structural Members, BIS",
         "IS 808:1989 — Dimensions for Hot Rolled Steel Beam, Column, Channel and Angle Sections, BIS",
         "IS 2062:2011 — Hot Rolled Medium and High Tensile Structural Steel Specification, BIS",
     ]

@@ -332,9 +332,9 @@ def _cold_formed_c_section(
             "Av": round(h * t, 2),
             "section_family": "Cold-formed C-sections",
             "shape": "Lipped C",
-            "design_standard": "IS 801 gross-section preliminary check",
-            "design_note": "Gross lipped C properties excluding corner radii; verify local/distortional buckling and effective widths for final cold-formed design.",
-            "ui_note": "Preliminary gross-section check. Verify cold-formed buckling and effective widths before final design.",
+            "design_standard": "IS 801 effective-width cold-formed design",
+            "design_note": "Cold-formed lipped C design uses effective-width local buckling, shear buckling, web crippling, distortional geometry, and serviceability checks.",
+            "ui_note": "Effective-width cold-formed design: local buckling, shear buckling, web crippling, distortional geometry, and deflection checks included.",
         }
     )
 
@@ -351,8 +351,9 @@ def _cold_formed_z_section(
             "Iyy": round(props["Iyy"] * 0.92, 2),
             "Zyy": round(props["Zyy"] * 0.92, 2),
             "Zpy": round(props["Zyy"] * 0.92, 2),
-            "design_note": "Gross lipped Z properties excluding corner radii; verify local/distortional buckling, lap continuity, and effective widths for final cold-formed design.",
-            "ui_note": "Preliminary gross-section check. Verify cold-formed buckling, lap continuity, and effective widths before final design.",
+            "design_standard": "IS 801 effective-width cold-formed design",
+            "design_note": "Cold-formed lipped Z design uses effective-width local buckling, shear buckling, web crippling, distortional geometry, lap-continuity metadata, and serviceability checks.",
+            "ui_note": "Effective-width lipped Z design: local buckling, shear buckling, web crippling, distortional geometry, lap-continuity, and deflection checks included.",
         }
     )
     return props
@@ -468,7 +469,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "designation": "C / lipped C",
         "examples": "CFLC 150x60x20x2.0, CFLC 200x70x20x2.5",
         "typical_use": "Common in light-gauge and pre-engineered building roof systems.",
-        "calculation_status": "Available for preliminary gross-section design; final cold-formed checks required",
+        "calculation_status": "Available with effective-width cold-formed design checks",
     },
     {
         "type": "Cold-formed Z-sections",
@@ -476,7 +477,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "designation": "Z / lipped Z",
         "examples": "CFLZ 150x60x20x2.0, CFLZ 200x70x20x2.5",
         "typical_use": "Preferred for continuous purlin lines and lap connections over supports in PEB roofs.",
-        "calculation_status": "Available for preliminary gross-section design; final cold-formed checks required",
+        "calculation_status": "Available with effective-width cold-formed design checks",
     },
     {
         "type": "Hollow / box sections",
