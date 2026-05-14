@@ -105,7 +105,7 @@ with col1:
     - Biaxial bending check (IS 800 Cl. 9.3.1.1)
     - Load combinations per IS 875 / IS 800 Table 4
     - Shear and deflection checks
-    - Common IS-based purlin section guidance
+    - ISMB/ISLB/ISMC, ISA, lipped C/Z, and RHS/SHS section options
     - PDF report with step-by-step calculations
     
     <span class='is-badge'>IS 800:2007</span>

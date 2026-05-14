@@ -430,9 +430,12 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
             "Self Weight",
             f"{sp.get('weight', 0.0):.1f} kg/m  [{r.get('sw_kNm', 0.0):.4f} kN/m]",
         ],
+        ["Design Basis", r.get("design_standard", "IS 800:2007 gross-section check")],
     ]
+    if r.get("design_note"):
+        sec_rows.append(["Design Note", r["design_note"]])
     story += _input_table(
-        sec_rows, s, "1.2  Section Properties  [Ref: SP 6(1):1964 / IS 808:1989]"
+        sec_rows, s, "1.2  Section Properties  [Ref: section database / IS tables]"
     )
 
     # ── 2. Load Calculation ─────────────────────────────────
@@ -528,6 +531,14 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         f"   → Web Classification: {cls['web_class']}",
         s,
     )
+    if cls.get("override"):
+        story += [
+            Paragraph(
+                f"Database classification override used for this section family: <b>{cls['override']}</b>.",
+                s["body"],
+            ),
+            Spacer(1, 3),
+        ]
     story += _result_box(
         "Overall Section Classification", cls["overall"], cls["overall"] != "Slender", s
     )
@@ -551,7 +562,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     # ── 5. Moment Capacity ──────────────────────────────────
     story += _section_heading("5.  DESIGN MOMENT CAPACITY  [IS 800:2007 Cl. 8.2.1]", s)
     section_class_label = cls["overall"]
-    if section_class_label in ("Plastic", "Compact"):
+    if r.get("use_plastic_modulus"):
         story += [
             Paragraph(
                 f"Section is <b>{section_class_label}</b> → use plastic section modulus (Zpx, Zpy).",
@@ -573,7 +584,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     else:
         story += [
             Paragraph(
-                "Section is <b>Semi-compact</b> → use elastic section modulus (Zxx, Zyy).",
+                f"Section is <b>{section_class_label}</b> for this gross-section check → use elastic section modulus (Zxx, Zyy).",
                 s["body"],
             ),
             Spacer(1, 3),

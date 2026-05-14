@@ -34,7 +34,12 @@ def _classify_ratio(ratio: float, limits: list[float]) -> str:
 
 
 def _section_classification(sp: dict[str, Any], fy: float) -> dict[str, Any]:
-    """Classify flanges/webs using IS 800:2007 Table 2 style limits."""
+    """Classify flanges/webs using IS 800:2007 Table 2 style limits.
+
+    Non-I rolled/cold-formed/tubular purlin databases can provide a conservative
+    gross-section override so the shared design workflow still returns finite
+    capacities while the UI/PDF exposes final-design notes for specialist checks.
+    """
     epsilon = math.sqrt(250.0 / fy) if fy > 0 else 1.0
 
     bf = _as_float(sp.get("bf"))
@@ -54,6 +59,10 @@ def _section_classification(sp: dict[str, Any], fy: float) -> dict[str, Any]:
         [flange_class, web_class], key=lambda label: SECTION_CLASS_ORDER[label]
     )
 
+    override = sp.get("section_class_override")
+    if override in SECTION_CLASS_ORDER:
+        overall = override
+
     return {
         "name": overall,
         "overall": overall,
@@ -64,6 +73,7 @@ def _section_classification(sp: dict[str, Any], fy: float) -> dict[str, Any]:
         "flange_class": flange_class,
         "web_class": web_class,
         "limits": {"flange": flange_limits, "web": web_limits},
+        "override": override,
     }
 
 
@@ -128,7 +138,9 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     Vy_kN = wy_d * span_m / 2.0
 
     cls = _section_classification(sp, fy)
-    use_plastic = cls["overall"] in ("Plastic", "Compact")
+    use_plastic = cls["overall"] in ("Plastic", "Compact") and bool(
+        sp.get("allow_plastic", True)
+    )
     z_major = _as_float(sp.get("Zpx" if use_plastic else "Zxx"))
     z_minor = _as_float(sp.get("Zpy" if use_plastic else "Zyy"))
 
@@ -137,7 +149,7 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     biaxial_ratio = _safe_ratio(My_kNm, Mdy_kNm) + _safe_ratio(Mz_kNm, Mdz_kNm)
     biaxial_ok = biaxial_ratio <= 1.0 and cls["overall"] != "Slender"
 
-    Av_mm2 = _as_float(sp.get("h")) * _as_float(sp.get("tw"))
+    Av_mm2 = _as_float(sp.get("Av"), _as_float(sp.get("h")) * _as_float(sp.get("tw")))
     Vd_kN = Av_mm2 * fy / (math.sqrt(3.0) * gm0 * 1000.0) if gm0 else 0.0
     shear_ratio = _safe_ratio(Vz_kN, Vd_kN)
     shear_ok = shear_ratio <= 1.0
@@ -198,6 +210,9 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         "Vz_kN": Vz_kN,
         "Vy_kN": Vy_kN,
         "section_class": cls,
+        "design_standard": sp.get("design_standard", "IS 800:2007 gross-section check"),
+        "design_note": sp.get("design_note", ""),
+        "use_plastic_modulus": use_plastic,
         "Mdz_kNm": Mdz_kNm,
         "Mdy_kNm": Mdy_kNm,
         "biaxial_ratio": biaxial_ratio,

@@ -9,7 +9,16 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 import streamlit as st
 import pandas as pd
-from utils.sections import COMMON_PURLIN_SECTION_TYPES, ISMB, ISLB, ISMC
+from utils.sections import (
+    COLD_FORMED_C,
+    COLD_FORMED_Z,
+    COMMON_PURLIN_SECTION_TYPES,
+    HOLLOW_BOX,
+    ISA,
+    ISLB,
+    ISMB,
+    ISMC,
+)
 from utils.purlin_calc import run_purlin_design
 from utils.pdf_report import generate_purlin_pdf
 
@@ -155,6 +164,10 @@ with c3:
         "ISMB (I-Beam)": ISMB,
         "ISLB (Light Beam)": ISLB,
         "ISMC (Channel)": ISMC,
+        "ISA (Angle)": ISA,
+        "Cold-formed C (Lipped)": COLD_FORMED_C,
+        "Cold-formed Z (Lipped)": COLD_FORMED_Z,
+        "Hollow / Box (RHS/SHS)": HOLLOW_BOX,
     }
     sec_type_label = st.selectbox("Section Type", list(all_sec_types.keys()))
     sec_dict = all_sec_types[sec_type_label]
@@ -164,14 +177,45 @@ with c3:
     )
     sp = sec_dict[sec_name]
 
-    with st.expander("📋 Section Properties (auto-filled from SP 6(1):1964)"):
+    with st.expander("📋 Section Properties (auto-filled from section database)"):
         col_a, col_b = st.columns(2)
         col_a.metric("A (cm²)", sp.get("Area", 0))
         col_a.metric("Ixx (cm⁴)", sp.get("Ixx", 0))
-        col_a.metric("Zpx (cm³)", sp.get("Zpx", 0))
+        col_a.metric("Zxx / Zyy (cm³)", f"{sp.get('Zxx', 0)} / {sp.get('Zyy', 0)}")
         col_b.metric("h × bf (mm)", f"{sp.get('h', 0)} × {sp.get('bf', 0)}")
         col_b.metric("tf / tw (mm)", f"{sp.get('tf', 0)} / {sp.get('tw', 0)}")
         col_b.metric("Weight (kg/m)", sp.get("weight", 0))
+        if sp.get("design_note"):
+            st.caption(sp["design_note"])
+
+with st.expander(
+    "📚 Common Purlin Section Types Used in IS-Based Design", expanded=False
+):
+    st.markdown(
+        "The calculation module designs rolled **ISMB/ISLB/ISMC**, **ISA angle**, "
+        "cold-formed **lipped C/Z**, and **RHS/SHS hollow-box** sections from the "
+        "project database. The table below summarizes the supported purlin families, "
+        "common shapes, example designations, and calculation scope."
+    )
+    st.dataframe(
+        pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(
+            columns={
+                "type": "Section Type",
+                "shape": "Common Shape",
+                "designation": "Common IS / Trade Designation",
+                "examples": "Examples",
+                "typical_use": "Typical Use",
+                "calculation_status": "Calculation Status",
+            }
+        ),
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.info(
+        "Cold-formed C/Z and angle entries use gross-section preliminary properties; "
+        "verify effective-width, local/distortional buckling, connection eccentricity, "
+        "and manufacturer data before issuing final construction design."
+    )
 
 with st.expander("📚 Common Purlin Section Types Used in IS-Based Design", expanded=False):
     st.markdown(

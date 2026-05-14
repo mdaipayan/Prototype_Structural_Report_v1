@@ -3,7 +3,14 @@ import unittest
 
 from utils.pdf_report import generate_purlin_pdf
 from utils.purlin_calc import run_purlin_design
-from utils.sections import COMMON_PURLIN_SECTION_TYPES, ISMB
+from utils.sections import (
+    COLD_FORMED_C,
+    COLD_FORMED_Z,
+    COMMON_PURLIN_SECTION_TYPES,
+    HOLLOW_BOX,
+    ISA,
+    ISMB,
+)
 
 
 class PurlinDesignTests(unittest.TestCase):
@@ -52,6 +59,36 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertIn("I-shape / beam profile", shapes)
         self.assertIn("L-shape / double-angle", shapes)
         self.assertIn("RHS / SHS / box profile", shapes)
+
+    def test_added_purlin_section_databases_run_design_calculations(self):
+        section_sets = {
+            "ISA 100x100x10": ISA["ISA 100x100x10"],
+            "CFLC 250x75x25x2.5": COLD_FORMED_C["CFLC 250x75x25x2.5"],
+            "CFLZ 250x75x25x2.5": COLD_FORMED_Z["CFLZ 250x75x25x2.5"],
+            "RHS 200x100x5.0": HOLLOW_BOX["RHS 200x100x5.0"],
+        }
+
+        for section_name, section_props in section_sets.items():
+            with self.subTest(section_name=section_name):
+                data = dict(self.input_data)
+                data.update(
+                    {
+                        "span_m": 3.0,
+                        "section_name": section_name,
+                        "section_props": section_props,
+                    }
+                )
+
+                result = run_purlin_design(data)
+
+                self.assertEqual(result["section_name"], section_name)
+                self.assertGreater(result["Mdz_kNm"], 0.0)
+                self.assertGreater(result["Mdy_kNm"], 0.0)
+                self.assertGreater(result["Vd_kN"], 0.0)
+                self.assertTrue(math.isfinite(result["biaxial_ratio"]))
+                self.assertTrue(math.isfinite(result["defl_ratio"]))
+                self.assertNotEqual(result["section_class"]["overall"], "Slender")
+                self.assertIn("gross-section", result["design_standard"])
 
     def test_pdf_report_generation_uses_calculation_output(self):
         result = run_purlin_design(self.input_data)
