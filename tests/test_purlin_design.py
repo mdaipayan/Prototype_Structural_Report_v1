@@ -3,7 +3,14 @@ import unittest
 
 from utils.pdf_report import generate_purlin_pdf
 from utils.purlin_calc import run_purlin_design
-from utils.sections import ISMB
+from utils.sections import (
+    COLD_FORMED_C,
+    COLD_FORMED_Z,
+    COMMON_PURLIN_SECTION_TYPES,
+    HOLLOW_BOX,
+    ISA,
+    ISMB,
+)
 
 
 class PurlinDesignTests(unittest.TestCase):
@@ -35,6 +42,63 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(result["shear_ok"])
         self.assertTrue(result["defl_ok"])
         self.assertTrue(math.isclose(result["sw_kNm"], 44.2 * 9.81 / 1000.0))
+
+    def test_common_purlin_section_guidance_lists_is_based_families(self):
+        designations = {item["designation"] for item in COMMON_PURLIN_SECTION_TYPES}
+        section_types = {item["type"] for item in COMMON_PURLIN_SECTION_TYPES}
+        shapes = {item["shape"] for item in COMMON_PURLIN_SECTION_TYPES}
+
+        self.assertIn("ISMC / ISLC", designations)
+        self.assertIn("ISMB / ISLB", designations)
+        self.assertIn("ISA", designations)
+        self.assertIn("C / lipped C", designations)
+        self.assertIn("Z / lipped Z", designations)
+        self.assertIn("IS 4923 tubular sections", designations)
+        self.assertIn("Cold-formed Z-sections", section_types)
+        self.assertIn("C-channel / U-channel", shapes)
+        self.assertIn("I-shape / beam profile", shapes)
+        self.assertIn("L-shape / double-angle", shapes)
+        self.assertIn("RHS / SHS / box profile", shapes)
+
+    def test_added_purlin_section_databases_run_design_calculations(self):
+        section_sets = {
+            "ISA 100x100x10": ISA["ISA 100x100x10"],
+            "CFLC 250x75x25x2.5": COLD_FORMED_C["CFLC 250x75x25x2.5"],
+            "CFLZ 250x75x25x2.5": COLD_FORMED_Z["CFLZ 250x75x25x2.5"],
+            "RHS 200x100x5.0": HOLLOW_BOX["RHS 200x100x5.0"],
+        }
+
+        for section_name, section_props in section_sets.items():
+            with self.subTest(section_name=section_name):
+                data = dict(self.input_data)
+                data.update(
+                    {
+                        "span_m": 3.0,
+                        "section_name": section_name,
+                        "section_props": section_props,
+                    }
+                )
+
+                result = run_purlin_design(data)
+
+                self.assertEqual(result["section_name"], section_name)
+                self.assertGreater(result["Mdz_kNm"], 0.0)
+                self.assertGreater(result["Mdy_kNm"], 0.0)
+                self.assertGreater(result["Vd_kN"], 0.0)
+                self.assertTrue(math.isfinite(result["biaxial_ratio"]))
+                self.assertTrue(math.isfinite(result["defl_ratio"]))
+                self.assertNotEqual(result["section_class"]["overall"], "Slender")
+                if section_name.startswith(("CFLC", "CFLZ")):
+                    cold_checks = result["cold_formed_checks"]
+                    self.assertIn("effective-width", result["design_standard"])
+                    self.assertGreater(cold_checks["area_eff_ratio"], 0.0)
+                    self.assertLessEqual(cold_checks["area_eff_ratio"], 1.0)
+                    self.assertGreater(cold_checks["Zxx_eff"], 0.0)
+                    self.assertGreater(cold_checks["Vd_shear_kN"], 0.0)
+                    self.assertIn("web_crippling_ok", cold_checks["checks"])
+                    self.assertIn("distortional_ok", cold_checks["checks"])
+                else:
+                    self.assertIn("gross-section", result["design_standard"])
 
     def test_pdf_report_generation_uses_calculation_output(self):
         result = run_purlin_design(self.input_data)
