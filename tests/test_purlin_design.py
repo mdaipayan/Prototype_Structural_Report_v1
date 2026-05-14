@@ -1,5 +1,6 @@
 import math
 import unittest
+from pathlib import Path
 
 from reportlab.platypus import CondPageBreak
 
@@ -44,6 +45,41 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(result["shear_ok"])
         self.assertTrue(result["defl_ok"])
         self.assertTrue(math.isclose(result["sw_kNm"], 44.2 * 9.81 / 1000.0))
+
+    def test_purlin_design_includes_lap_splice_check(self):
+        data = dict(self.input_data)
+        data.update(
+            {
+                "lap_length_m": 0.75,
+                "lap_bolt_dia_mm": 16.0,
+                "lap_bolt_rows": 2,
+                "lap_bolts_per_row": 2,
+                "lap_bolt_grade_fub": 400.0,
+                "lap_plate_fu": 410.0,
+            }
+        )
+
+        result = run_purlin_design(data)
+        lap = result["lap_design"]
+
+        self.assertEqual(lap["bolt_count"], 4)
+        self.assertAlmostEqual(lap["provided_lap_mm"], 750.0)
+        self.assertAlmostEqual(lap["recommended_lap_mm"], 600.0)
+        self.assertTrue(lap["lap_length_ok"])
+        self.assertGreater(lap["support_reaction_kN"], result["Vz_kN"])
+        self.assertGreater(lap["group_capacity_kN"], lap["support_reaction_kN"])
+        self.assertTrue(lap["overall_ok"])
+
+    def test_purlin_lap_length_can_govern_overall_status(self):
+        data = dict(self.input_data)
+        data.update({"lap_length_m": 0.25})
+
+        result = run_purlin_design(data)
+        lap = result["lap_design"]
+
+        self.assertFalse(lap["lap_length_ok"])
+        self.assertFalse(lap["overall_ok"])
+        self.assertEqual(result["overall_status"], "UNSAFE")
 
     def test_common_purlin_section_guidance_lists_is_based_families(self):
         designations = {item["designation"] for item in COMMON_PURLIN_SECTION_TYPES}
@@ -123,6 +159,19 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertEqual(is801_result["design_code"], "IS 801:1975")
         self.assertIn("effective-width", is801_result["design_standard"])
         self.assertIn("overall_ok", is801_result["cold_formed_checks"]["checks"])
+
+    def test_purlin_page_refreshes_existing_result_when_inputs_change(self):
+        page_source = Path("pages/1_Purlin_Design.py").read_text()
+
+        self.assertIn(
+            'st.session_state.get("purlin_input") != current_input', page_source
+        )
+        self.assertIn(
+            "_store_current_purlin_design(show_refresh_notice=True)", page_source
+        )
+        self.assertIn(
+            "pdf_bytes = generate_purlin_pdf(r, project=project_name)", page_source
+        )
 
     def test_pdf_topic_headers_request_page_break_space(self):
         styles = _styles()

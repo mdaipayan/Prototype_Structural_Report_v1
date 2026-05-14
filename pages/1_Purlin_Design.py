@@ -230,6 +230,29 @@ with c3:
                 unsafe_allow_html=True,
             )
 
+    with st.expander("🔩 Purlin Lap / Splice Design", expanded=False):
+        default_lap = max(0.10 * span, 0.60)
+        lap_length = st.number_input(
+            "Provided Lap Length (m)",
+            0.10,
+            3.00,
+            float(default_lap),
+            0.05,
+            help="Recommended minimum is max(10% of span, 600 mm).",
+        )
+        lap_bolt_dia = st.selectbox("Lap Bolt Diameter (mm)", [12, 16, 20, 24], index=1)
+        lap_bolt_rows = st.number_input("Bolt Rows", 1, 6, 2, 1)
+        lap_bolts_per_row = st.number_input("Bolts per Row", 1, 8, 2, 1)
+        lap_bolt_grade = st.selectbox("Bolt Grade fub (MPa)", [400, 800], index=0)
+        lap_plate_fu = st.number_input(
+            "Connected Steel fu (MPa)",
+            360.0,
+            550.0,
+            410.0,
+            10.0,
+            help="Ultimate tensile strength used for bolt bearing capacity.",
+        )
+
 st.markdown("### 📚 Common Purlin Section Types Used in IS-Based Design")
 st.markdown(
     "The calculation module designs rolled **ISMB/ISLB/ISMC**, **ISA angle**, "
@@ -260,26 +283,48 @@ st.info(
 
 
 # ── Run Calculation ────────────────────────────────────────────────────────
-if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):
-    inp = {
-        "span_m": span,
-        "spacing_m": spacing,
-        "roof_slope_deg": slope,
-        "dead_load": dead_load,
-        "live_load": live_load,
-        "wind_pressure": wind_pres,
-        "Cp_ext": Cpe,
-        "Cp_int": Cpi,
-        "fy": float(fy),
-        "gm0": gm0,
-        "section_name": sec_name,
-        "section_props": sp,
-        "design_code": design_code,
-    }
-    r = run_purlin_design(inp)
-    st.session_state["purlin_result"] = r
+current_input = {
+    "span_m": span,
+    "spacing_m": spacing,
+    "roof_slope_deg": slope,
+    "dead_load": dead_load,
+    "live_load": live_load,
+    "wind_pressure": wind_pres,
+    "Cp_ext": Cpe,
+    "Cp_int": Cpi,
+    "fy": float(fy),
+    "gm0": gm0,
+    "section_name": sec_name,
+    "section_props": sp,
+    "design_code": design_code,
+    "lap_length_m": lap_length,
+    "lap_bolt_dia_mm": lap_bolt_dia,
+    "lap_bolt_rows": lap_bolt_rows,
+    "lap_bolts_per_row": lap_bolts_per_row,
+    "lap_bolt_grade_fub": lap_bolt_grade,
+    "lap_plate_fu": lap_plate_fu,
+}
+
+
+def _store_current_purlin_design(show_refresh_notice=False):
+    st.session_state["purlin_result"] = run_purlin_design(current_input)
+    st.session_state["purlin_input"] = dict(current_input)
     st.session_state["purlin_project"] = project_name
     st.session_state["purlin_section_name"] = sec_name
+    if show_refresh_notice:
+        st.info(
+            "Inputs changed after the previous design/report. The purlin design "
+            "and downloadable PDF have been recalculated using the latest inputs."
+        )
+
+
+if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):
+    _store_current_purlin_design()
+elif (
+    "purlin_result" in st.session_state
+    and st.session_state.get("purlin_input") != current_input
+):
+    _store_current_purlin_design(show_refresh_notice=True)
 
 # ── Display Results ────────────────────────────────────────────────────────
 if "purlin_result" in st.session_state:
@@ -545,9 +590,11 @@ Stability / bearing:
                     "Status": [
                         "✅ PASS" if cf_checks.get("local_buckling_ok") else "❌ FAIL",
                         "✅ PASS" if cf_checks.get("distortional_ok") else "❌ FAIL",
-                        "✅ PASS"
-                        if cf_checks.get("effective_width_bending_ok")
-                        else "❌ FAIL",
+                        (
+                            "✅ PASS"
+                            if cf_checks.get("effective_width_bending_ok")
+                            else "❌ FAIL"
+                        ),
                         "✅ PASS" if cf_checks.get("shear_buckling_ok") else "❌ FAIL",
                         "✅ PASS" if cf_checks.get("web_crippling_ok") else "❌ FAIL",
                         "✅ PASS" if cf_checks.get("serviceability_ok") else "❌ FAIL",
@@ -593,6 +640,54 @@ Permissible:  L / 180  =  {span * 1000:.0f} / 180  =  {r["delta_limit_mm"]:.3f} 
                 unsafe_allow_html=True,
             )
 
+    # ── Step 8: Lap / Splice Design ───────────────────────────
+    lap = r.get("lap_design") or {}
+    with st.expander(
+        "📌 Step 8 — Purlin Lap / Splice Design  [IS 800:2007 Bolted Connection]",
+        expanded=True,
+    ):
+        st.markdown(
+            f"""
+<div class="formula-box">
+Method: {lap.get("method", "Purlin lap/splice bolt group check at support")}
+
+Lap length:
+  Provided lap = {lap.get("provided_lap_mm", 0):.0f} mm
+  Recommended minimum = max(0.10 × L, 600) = max(0.10 × {r["span_m"] * 1000:.0f}, 600) = {lap.get("recommended_lap_mm", 0):.0f} mm
+
+Bolt group:
+  Bolts = {lap.get("bolt_rows", 0)} rows × {lap.get("bolts_per_row", 0)} per row = {lap.get("bolt_count", 0)} bolts
+  Diameter = {lap.get("bolt_dia_mm", 0):.0f} mm, hole = {lap.get("hole_dia_mm", 0):.0f} mm, fub = {lap.get("bolt_grade_fub", 0):.0f} MPa
+
+Resultant support reaction:
+  R = √(Vz² + Vy²) = √({r["Vz_kN"]:.4f}² + {r["Vy_kN"]:.4f}²) = {lap.get("support_reaction_kN", 0):.4f} kN
+
+Bolt capacity per bolt:
+  Vdsb = fub × Anb / (√3 × γmb) = {lap.get("bolt_shear_capacity_kN", 0):.4f} kN
+  Vdpb = 2.5 × kb × d × t × fu / γmb = {lap.get("bolt_bearing_capacity_kN", 0):.4f} kN
+  Vbolt = min(Vdsb, Vdpb) = {lap.get("bolt_capacity_kN", 0):.4f} kN
+
+Group capacity:
+  Vgroup = n × Vbolt = {lap.get("bolt_count", 0)} × {lap.get("bolt_capacity_kN", 0):.4f} = {lap.get("group_capacity_kN", 0):.4f} kN
+  Utilisation = R / Vgroup = {lap.get("bolt_utilisation", 0):.4f}
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        lap_status = bool(lap.get("overall_ok"))
+        status_class = "result-safe" if lap_status else "result-fail"
+        status_text = "✓ PASS" if lap_status else "✗ FAIL"
+        st.markdown(
+            f'<div class="{status_class}">{status_text} — Lap length, bolt capacity, and minimum detailing checks are {"satisfied" if lap_status else "not satisfied"}.</div>',
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            lap.get(
+                "note",
+                "Final lap detailing should be reviewed with project-specific continuity and erection requirements.",
+            )
+        )
+
     # ── Summary Table ──────────────────────────────────────────
     st.divider()
     st.markdown("### 📊 Design Summary")
@@ -619,6 +714,15 @@ Permissible:  L / 180  =  {span * 1000:.0f} / 180  =  {r["delta_limit_mm"]:.3f} 
             "Utilisation (%)": f"{r.get('defl_ratio', 0) * 100:.1f}",
             "Status": "✅ PASS" if r.get("defl_ok") else "❌ FAIL",
         },
+        {
+            "Check": "Purlin Lap / Splice",
+            "Applied": f"R = {r.get('lap_design', {}).get('support_reaction_kN', 0):.4f} kN",
+            "Capacity": f"Vgroup = {r.get('lap_design', {}).get('group_capacity_kN', 0):.4f} kN",
+            "Utilisation (%)": f"{r.get('lap_design', {}).get('bolt_utilisation', 0) * 100:.1f}",
+            "Status": (
+                "✅ PASS" if r.get("lap_design", {}).get("overall_ok") else "❌ FAIL"
+            ),
+        },
     ]
     if r.get("cold_formed_checks"):
         cf_ok = r["cold_formed_checks"].get("checks", {}).get("overall_ok", False)
@@ -637,12 +741,8 @@ Permissible:  L / 180  =  {span * 1000:.0f} / 180  =  {r["delta_limit_mm"]:.3f} 
     # ── PDF Download ───────────────────────────────────────────
     st.divider()
     st.markdown("### 📄 Download Design Report (PDF)")
-    pdf_bytes = generate_purlin_pdf(
-        r, project=st.session_state.get("purlin_project", "")
-    )
-    download_name = st.session_state.get(
-        "purlin_section_name", r.get("section_name", "Purlin")
-    )
+    pdf_bytes = generate_purlin_pdf(r, project=project_name)
+    download_name = sec_name or r.get("section_name", "Purlin")
     st.download_button(
         label="⬇️  Download PDF Report",
         data=pdf_bytes,
