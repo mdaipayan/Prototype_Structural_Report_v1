@@ -1,5 +1,8 @@
+import base64
 import math
+import re
 import unittest
+import zlib
 from pathlib import Path
 
 from reportlab.platypus import CondPageBreak
@@ -14,6 +17,41 @@ from utils.sections import (
     ISA,
     ISMB,
 )
+
+
+def _decoded_pdf_page_streams(pdf_bytes: bytes) -> list[bytes]:
+    """Return decoded ReportLab page content streams in page order."""
+    pages_match = re.search(rb"/Count \d+ /Kids \[([^\]]+)\]", pdf_bytes)
+    if not pages_match:
+        return []
+
+    page_ids = [int(match) for match in re.findall(rb"(\d+) 0 R", pages_match.group(1))]
+    decoded_pages = []
+    for page_id in page_ids:
+        page_match = re.search(rf"{page_id} 0 obj(.*?)endobj".encode(), pdf_bytes, re.S)
+        if not page_match:
+            continue
+        content_match = re.search(rb"/Contents (\d+) 0 R", page_match.group(1))
+        if not content_match:
+            decoded_pages.append(b"")
+            continue
+
+        content_id = int(content_match.group(1))
+        content_match = re.search(
+            rf"{content_id} 0 obj(.*?)endobj".encode(), pdf_bytes, re.S
+        )
+        if not content_match:
+            decoded_pages.append(b"")
+            continue
+
+        stream = (
+            content_match.group(1)
+            .split(b"stream\n", 1)[1]
+            .split(b"endstream", 1)[0]
+            .strip()
+        )
+        decoded_pages.append(zlib.decompress(base64.a85decode(stream, adobe=True)))
+    return decoded_pages
 
 
 class PurlinDesignTests(unittest.TestCase):
@@ -189,6 +227,15 @@ class PurlinDesignTests(unittest.TestCase):
 
         self.assertGreater(len(pdf_bytes), 5000)
         self.assertEqual(pdf_bytes[:4], b"%PDF")
+
+    def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
+        result = run_purlin_design(self.input_data)
+        pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
+        decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
+
+        self.assertGreaterEqual(len(decoded_pages), 1)
+        self.assertIn(b"REFERENCES", decoded_pages[-1])
+        self.assertGreater(decoded_pages[-1].count(b" Tj"), 20)
 
 
 if __name__ == "__main__":
