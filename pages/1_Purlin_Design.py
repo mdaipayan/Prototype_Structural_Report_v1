@@ -217,6 +217,31 @@ with st.expander(
         "and manufacturer data before issuing final construction design."
     )
 
+with st.expander("📚 Common Purlin Section Types Used in IS-Based Design", expanded=False):
+    st.markdown(
+        "The calculation module currently designs rolled **ISMB**, **ISLB**, and **ISMC** "
+        "sections from the project database. The table below also documents other common "
+        "purlin families and cross-section shapes used in IS-based roof framing so "
+        "designers can distinguish calculable rolled sections from guidance-only alternatives."
+    )
+    st.dataframe(
+        pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(columns={
+            "type": "Section Type",
+            "shape": "Common Shape",
+            "designation": "Common IS / Trade Designation",
+            "examples": "Examples",
+            "typical_use": "Typical Use",
+            "calculation_status": "Calculation Status",
+        }),
+        hide_index=True,
+        use_container_width=True,
+    )
+    st.info(
+        "Angle, hollow/box, and cold-formed C/Z purlins are listed as common practice guidance only. "
+        "Add verified section properties and the relevant design checks before using them "
+        "as selectable calculation sections."
+    )
+
 # ── Run Calculation ────────────────────────────────────────────────────────
 if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):
     inp = {
