@@ -486,6 +486,14 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         ["Yield Strength (fy)", f"{r['fy']:.0f} MPa  [IS 2062 E250]"],
         ["Partial Safety Factor (γm0)", f"{r['gm0']:.2f}  [IS 800 Cl. 5.4.1]"],
         ["Modulus of Elasticity (E)", "2×10⁵ MPa"],
+        [
+            "Purlin Self Weight Handling",
+            (
+                "Added separately"
+                if r.get("dead_load_excludes_self_weight", True)
+                else "Already included in DL; not added again"
+            ),
+        ],
     ]
     lap = r.get("lap_design", {})
     if lap:
@@ -512,8 +520,8 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         ["Elastic Mod. Zyy", f"{sp.get('Zyy', 0.0):.2f} cm³"],
         ["Plastic Mod. Zpx", f"{sp.get('Zpx', 0.0):.2f} cm³"],
         ["Plastic Mod. Zpy", f"{sp.get('Zpy', 0.0):.2f} cm³"],
-        ["Radius of Gyration rxx (rzz)", f"{sp.get('rxx', 0.0):.2f} cm"],
-        ["Radius of Gyration ryy", f"{sp.get('ryy', 0.0):.2f} cm"],
+        ["Radius of Gyration rxx (rzz)", f"{r.get('rxx_cm', 0.0):.2f} cm"],
+        ["Radius of Gyration ryy", f"{r.get('ryy_cm', 0.0):.2f} cm"],
         [
             "Self Weight",
             f"{sp.get('weight', 0.0):.1f} kg/m  [{r.get('sw_kNm', 0.0):.4f} kN/m]",
@@ -540,12 +548,20 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     ]
 
     story += _formula_block(
-        "w_DL  = DL × s + SW  =  "
-        f"{r['dead_load']:.2f} × {r['spacing_m']:.2f} + {r['sw_kNm']:.4f}  =  "
+        "w_DL  = DL × s + SW_added  =  "
+        f"{r['dead_load']:.2f} × {r['spacing_m']:.2f} + {r.get('sw_added_kNm', r['sw_kNm']):.4f}  =  "
         f"{r['wz_DL'] / math.cos(math.radians(r['slope_deg'])):.4f} kN/m  (total)",
         s,
         "IS 875 Pt.1",
     )
+    story += [
+        Paragraph(
+            "Self-weight note: selected-section self-weight is added only when the dead load input excludes purlin self-weight. "
+            "If the project DL already includes a purlin allowance, set the input accordingly to avoid double-counting.",
+            s["ref"],
+        ),
+        Spacer(1, 3),
+    ]
     story += _formula_block(
         f"w_z,DL = w_DL × cos θ  =  {r['wz_DL']:.4f} kN/m  (perp. to slope → Mz)", s
     )
@@ -702,6 +718,48 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         r["biaxial_ok"],
         s,
     )
+
+    # ── 6.1 LTB / Uplift Restraint Check ───────────────────
+    stability = r.get("stability_checks", {})
+    if stability:
+        story += _section_heading(
+            "6.1  LTB & WIND UPLIFT RESTRAINT CHECK  [IS 800:2007 Cl. 8.2.2]",
+            s,
+        )
+        story += _formula_block(
+            f"Full section capacity assumption:\n"
+            f"  Top compression flange restrained = {'YES' if stability.get('top_flange_restrained') else 'NO'}\n"
+            f"  Bottom/uplift flange restraint provided = {'YES' if stability.get('bottom_flange_restrained') else 'NO'}\n\n"
+            f"Wind uplift reversal:\n"
+            f"  Governing uplift combo = {stability.get('governing_uplift_combo', 'None')}\n"
+            f"  wz,uplift = {stability.get('governing_uplift_wz_kNm', 0.0):.4f} kN/m\n"
+            f"  Mz,uplift = |wz,uplift| × L² / 8 = {stability.get('uplift_moment_kNm', 0.0):.4f} kNm\n"
+            f"  Mz,uplift / Mdz = {stability.get('uplift_ratio', 0.0):.4f}\n\n"
+            f"Note: {stability.get('note', '')}",
+            s,
+            "IS 800 Cl. 8.2.2",
+        )
+        stability_rows = [
+            [
+                "Gravity/top-flange LTB restraint",
+                "PASS" if stability.get("ltb_ok") else "FAIL",
+            ],
+            [
+                "Wind uplift bottom-flange bracing",
+                "PASS" if stability.get("uplift_bracing_ok") else "FAIL",
+            ],
+            [
+                "Uplift moment vs major-axis capacity",
+                "PASS" if stability.get("uplift_capacity_ok") else "FAIL",
+            ],
+        ]
+        story += _input_table(stability_rows, s, "6.1.1  Stability/Uplift Summary")
+        story += _result_box(
+            "LTB / wind uplift restraint assumptions",
+            "PASS" if stability.get("overall_ok") else "FAIL",
+            bool(stability.get("overall_ok")),
+            s,
+        )
 
     # ── 7. Shear Check ──────────────────────────────────────
     story += _section_heading("7.  SHEAR CAPACITY CHECK  [IS 800:2007 Cl. 8.4.1]", s)

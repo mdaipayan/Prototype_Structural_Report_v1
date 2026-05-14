@@ -129,7 +129,12 @@ with c2:
         3.0,
         0.55,
         0.05,
-        help="Roofing + insulation (excluding purlin self-wt)",
+        help="Roofing + insulation. Use the checkbox below to control purlin self-weight.",
+    )
+    dead_load_excludes_self_weight = st.checkbox(
+        "Dead load excludes purlin self-weight",
+        value=True,
+        help="Keep checked to add selected-section self-weight separately. Uncheck if DL already includes purlin weight allowance.",
     )
     live_load = st.number_input(
         "Live Load (kN/m²)",
@@ -220,6 +225,10 @@ with c3:
         col_a, col_b = st.columns(2)
         col_a.metric("A (cm²)", sp.get("Area", 0))
         col_a.metric("Ixx (cm⁴)", sp.get("Ixx", 0))
+        area = sp.get("Area", 0) or 0
+        rxx_preview = (sp.get("Ixx", 0) / area) ** 0.5 if area else 0
+        ryy_preview = (sp.get("Iyy", 0) / area) ** 0.5 if area else 0
+        col_a.metric("rxx / ryy (cm)", f"{rxx_preview:.2f} / {ryy_preview:.2f}")
         col_a.metric("Zxx / Zyy (cm³)", f"{sp.get('Zxx', 0)} / {sp.get('Zyy', 0)}")
         col_b.metric("h × bf (mm)", f"{sp.get('h', 0)} × {sp.get('bf', 0)}")
         col_b.metric("tf / tw (mm)", f"{sp.get('tf', 0)} / {sp.get('tw', 0)}")
@@ -229,6 +238,22 @@ with c3:
                 f"<div class='design-note'>{sp.get('ui_note', sp['design_note'])}</div>",
                 unsafe_allow_html=True,
             )
+
+    with st.expander("🧷 Flange Restraint / Wind Uplift Assumptions", expanded=False):
+        top_flange_restrained = st.checkbox(
+            "Roof sheeting restrains top compression flange",
+            value=True,
+            help="Required for using full major-axis section capacity under gravity loading unless LTB is checked separately.",
+        )
+        bottom_flange_restrained = st.checkbox(
+            "Bottom flange / uplift restraint provided",
+            value=True,
+            help="Required when wind suction reverses compression to the bottom flange.",
+        )
+        st.caption(
+            "If either restraint is not provided, the report marks the explicit stability "
+            "assumption check as not satisfied so an LTB/uplift bracing design can be added."
+        )
 
     with st.expander("🔩 Purlin Lap / Splice Design", expanded=False):
         default_lap = max(0.10 * span, 0.60)
@@ -303,6 +328,9 @@ current_input = {
     "lap_bolts_per_row": lap_bolts_per_row,
     "lap_bolt_grade_fub": lap_bolt_grade,
     "lap_plate_fu": lap_plate_fu,
+    "dead_load_excludes_self_weight": dead_load_excludes_self_weight,
+    "top_flange_restrained": top_flange_restrained,
+    "bottom_flange_restrained": bottom_flange_restrained,
 }
 
 
@@ -640,10 +668,45 @@ Permissible:  L / 180  =  {span * 1000:.0f} / 180  =  {r["delta_limit_mm"]:.3f} 
                 unsafe_allow_html=True,
             )
 
-    # ── Step 8: Lap / Splice Design ───────────────────────────
+    # ── Step 8: LTB / Wind Uplift Restraint ───────────────────
+    stability = r.get("stability_checks") or {}
+    with st.expander(
+        "📌 Step 8 — Lateral Torsional Buckling & Wind Uplift Restraint",
+        expanded=True,
+    ):
+        st.markdown(
+            f"""
+<div class="formula-box">
+Full section bending capacity assumption:
+  Top compression flange restrained = {"YES" if stability.get("top_flange_restrained") else "NO"}
+  Bottom/uplift flange restraint provided = {"YES" if stability.get("bottom_flange_restrained") else "NO"}
+
+Wind uplift check:
+  Governing uplift combo = {stability.get("governing_uplift_combo", "None")}
+  wz,uplift = {stability.get("governing_uplift_wz_kNm", 0):.4f} kN/m
+  Mz,uplift = |wz,uplift| × L² / 8 = {stability.get("uplift_moment_kNm", 0):.4f} kNm
+  Uplift bending ratio = Mz,uplift / Mdz = {stability.get("uplift_ratio", 0):.4f}
+
+Note: {stability.get("note", "Compression flange restraint must be verified for LTB and uplift reversal.")}
+</div>
+""",
+            unsafe_allow_html=True,
+        )
+        if stability.get("overall_ok"):
+            st.markdown(
+                '<div class="result-safe">✓ PASS — Compression-flange restraint assumptions and uplift bending check are satisfied.</div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                '<div class="result-fail">✗ FAIL — Provide explicit LTB/uplift restraint verification or reduce bending capacity.</div>',
+                unsafe_allow_html=True,
+            )
+
+    # ── Step 9: Lap / Splice Design ───────────────────────────
     lap = r.get("lap_design") or {}
     with st.expander(
-        "📌 Step 8 — Purlin Lap / Splice Design  [IS 800:2007 Bolted Connection]",
+        "📌 Step 9 — Purlin Lap / Splice Design  [IS 800:2007 Bolted Connection]",
         expanded=True,
     ):
         st.markdown(
@@ -713,6 +776,17 @@ Group capacity:
             "Capacity": f"L/180 = {r['delta_limit_mm']:.3f} mm",
             "Utilisation (%)": f"{r.get('defl_ratio', 0) * 100:.1f}",
             "Status": "✅ PASS" if r.get("defl_ok") else "❌ FAIL",
+        },
+        {
+            "Check": "LTB / Wind Uplift Restraint",
+            "Applied": f"Mz,uplift = {r.get('stability_checks', {}).get('uplift_moment_kNm', 0):.4f} kNm",
+            "Capacity": f"Mdz = {r.get('Mdz_kNm', 0):.4f} kNm",
+            "Utilisation (%)": f"{r.get('stability_checks', {}).get('uplift_ratio', 0) * 100:.1f}",
+            "Status": (
+                "✅ PASS"
+                if r.get("stability_checks", {}).get("overall_ok")
+                else "❌ FAIL"
+            ),
         },
         {
             "Check": "Purlin Lap / Splice",

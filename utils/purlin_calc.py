@@ -244,6 +244,69 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _as_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+    return bool(value)
+
+
+def _radius_of_gyration_cm(sp: dict[str, Any], axis: str) -> float:
+    key = "rxx" if axis == "x" else "ryy"
+    direct_value = _as_float(sp.get(key))
+    if direct_value > 0:
+        return direct_value
+
+    inertia_key = "Ixx" if axis == "x" else "Iyy"
+    inertia_cm4 = _as_float(sp.get(inertia_key))
+    area_cm2 = _as_float(sp.get("Area"))
+    return (
+        math.sqrt(inertia_cm4 / area_cm2) if inertia_cm4 > 0 and area_cm2 > 0 else 0.0
+    )
+
+
+def _stability_checks(
+    signed_combos: dict[str, tuple[float, float]],
+    span_m: float,
+    Mdz_kNm: float,
+    top_flange_restrained: bool,
+    bottom_flange_restrained: bool,
+    use_plastic: bool,
+) -> dict[str, Any]:
+    """Return explicit flange restraint, LTB, and wind-uplift checks."""
+    uplift_items = [(name, wz) for name, (wz, _wy) in signed_combos.items() if wz < 0]
+    governing_uplift_combo, governing_uplift_wz = (
+        min(uplift_items, key=lambda item: item[1]) if uplift_items else ("None", 0.0)
+    )
+    uplift_moment_kNm = abs(governing_uplift_wz) * span_m**2 / 8.0
+    uplift_ratio = _safe_ratio(uplift_moment_kNm, Mdz_kNm)
+
+    ltb_ok = bool(top_flange_restrained)
+    uplift_ok = (not uplift_items) or bool(bottom_flange_restrained)
+    capacity_ok = uplift_ratio <= 1.0
+
+    return {
+        "top_flange_restrained": bool(top_flange_restrained),
+        "bottom_flange_restrained": bool(bottom_flange_restrained),
+        "uses_full_section_capacity": bool(use_plastic),
+        "ltb_ok": ltb_ok,
+        "wind_uplift_present": bool(uplift_items),
+        "governing_uplift_combo": governing_uplift_combo,
+        "governing_uplift_wz_kNm": governing_uplift_wz,
+        "uplift_moment_kNm": uplift_moment_kNm,
+        "uplift_ratio": uplift_ratio,
+        "uplift_capacity_ok": capacity_ok,
+        "uplift_bracing_ok": uplift_ok,
+        "overall_ok": ltb_ok and uplift_ok and capacity_ok,
+        "note": (
+            "Full section bending capacity is valid only when the compression flange "
+            "is adequately laterally restrained. Wind suction reverses compression "
+            "to the bottom flange, so bottom-flange/uplift bracing must be verified."
+        ),
+    }
+
+
 def _bolt_lap_design(
     sp: dict[str, Any],
     Vz_kN: float,
@@ -380,6 +443,11 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     lap_bolts_per_row = _as_float(inp.get("lap_bolts_per_row"), 2.0)
     lap_bolt_grade_fub = _as_float(inp.get("lap_bolt_grade_fub"), 400.0)
     lap_plate_fu = _as_float(inp.get("lap_plate_fu"), 410.0)
+    dead_load_excludes_self_weight = _as_bool(
+        inp.get("dead_load_excludes_self_weight"), True
+    )
+    top_flange_restrained = _as_bool(inp.get("top_flange_restrained"), True)
+    bottom_flange_restrained = _as_bool(inp.get("bottom_flange_restrained"), True)
 
     theta = math.radians(slope_deg)
     cos_t = math.cos(theta)
@@ -387,7 +455,8 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
 
     # kg/m × g / 1000 = kN/m.
     sw_kNm = _as_float(sp.get("weight")) * 9.81 / 1000.0
-    w_dl_total = dead_load * spacing_m + sw_kNm
+    sw_added_kNm = sw_kNm if dead_load_excludes_self_weight else 0.0
+    w_dl_total = dead_load * spacing_m + sw_added_kNm
     w_ll_total = live_load * spacing_m
 
     wz_DL = w_dl_total * cos_t
@@ -459,6 +528,15 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         shear_ratio = cold_formed_checks["shear_ratio"]
         Ixx_design_cm4 = cold_formed_checks["Ixx_eff"]
 
+    stability_checks = _stability_checks(
+        signed_combos,
+        span_m,
+        Mdz_kNm,
+        top_flange_restrained,
+        bottom_flange_restrained,
+        use_plastic,
+    )
+
     biaxial_ok = biaxial_ratio <= 1.0 and cls["overall"] != "Slender"
     shear_ok = shear_ratio <= 1.0
 
@@ -495,6 +573,7 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         shear_ok,
         defl_ok,
         cls["overall"] != "Slender",
+        stability_checks["overall_ok"],
         lap_design["overall_ok"],
     ]
     if design_code == "IS 801:1975":
@@ -519,6 +598,8 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         "fy": fy,
         "gm0": gm0,
         "sw_kNm": sw_kNm,
+        "sw_added_kNm": sw_added_kNm,
+        "dead_load_excludes_self_weight": dead_load_excludes_self_weight,
         "w_dl_total": w_dl_total,
         "w_ll_total": w_ll_total,
         "wz_DL": wz_DL,
@@ -543,6 +624,9 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         "Vz_kN": Vz_kN,
         "Vy_kN": Vy_kN,
         "section_class": cls,
+        "rxx_cm": _radius_of_gyration_cm(sp, "x"),
+        "ryy_cm": _radius_of_gyration_cm(sp, "y"),
+        "stability_checks": stability_checks,
         "design_code": design_code,
         "design_standard": (
             sp.get("design_standard", "IS 801:1975 effective-width cold-formed design")

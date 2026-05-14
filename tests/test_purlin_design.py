@@ -119,6 +119,36 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertFalse(lap["overall_ok"])
         self.assertEqual(result["overall_status"], "UNSAFE")
 
+    def test_purlin_design_derives_radius_and_stability_checks(self):
+        result = run_purlin_design(self.input_data)
+
+        self.assertAlmostEqual(result["rxx_cm"], math.sqrt(8603.0 / 56.2))
+        self.assertAlmostEqual(result["ryy_cm"], math.sqrt(453.0 / 56.2))
+        self.assertTrue(result["stability_checks"]["wind_uplift_present"])
+        self.assertTrue(result["stability_checks"]["overall_ok"])
+        self.assertGreater(result["stability_checks"]["uplift_moment_kNm"], 0.0)
+
+    def test_self_weight_and_restraint_inputs_can_govern_purlin_design(self):
+        data = dict(self.input_data)
+        data.update(
+            {
+                "dead_load_excludes_self_weight": False,
+                "top_flange_restrained": False,
+                "bottom_flange_restrained": False,
+            }
+        )
+
+        result = run_purlin_design(data)
+
+        self.assertEqual(result["sw_added_kNm"], 0.0)
+        self.assertLess(
+            result["w_dl_total"],
+            self.input_data["dead_load"] * self.input_data["spacing_m"]
+            + result["sw_kNm"],
+        )
+        self.assertFalse(result["stability_checks"]["overall_ok"])
+        self.assertEqual(result["overall_status"], "UNSAFE")
+
     def test_common_purlin_section_guidance_lists_is_based_families(self):
         designations = {item["designation"] for item in COMMON_PURLIN_SECTION_TYPES}
         section_types = {item["type"] for item in COMMON_PURLIN_SECTION_TYPES}
@@ -225,8 +255,22 @@ class PurlinDesignTests(unittest.TestCase):
         result = run_purlin_design(self.input_data)
         pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
 
+        decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
+
         self.assertGreater(len(pdf_bytes), 5000)
         self.assertEqual(pdf_bytes[:4], b"%PDF")
+        self.assertTrue(any(b"12.37" in page for page in decoded_pages))
+        self.assertTrue(any(b"Self-weight note" in page for page in decoded_pages))
+        self.assertTrue(any(b"LTB" in page for page in decoded_pages))
+
+    def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
+        result = run_purlin_design(self.input_data)
+        pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
+        decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
+
+        self.assertGreaterEqual(len(decoded_pages), 1)
+        self.assertIn(b"REFERENCES", decoded_pages[-1])
+        self.assertGreater(decoded_pages[-1].count(b" Tj"), 20)
 
     def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
         result = run_purlin_design(self.input_data)
