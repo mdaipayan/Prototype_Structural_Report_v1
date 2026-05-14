@@ -84,10 +84,13 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(result["defl_ok"])
         self.assertTrue(math.isclose(result["sw_kNm"], 44.2 * 9.81 / 1000.0))
 
-    def test_purlin_design_includes_lap_splice_check(self):
+    def test_purlin_design_includes_lap_splice_check_for_cold_formed_only(self):
         data = dict(self.input_data)
         data.update(
             {
+                "span_m": 3.0,
+                "section_name": "CFLC 250x75x25x2.5",
+                "section_props": COLD_FORMED_C["CFLC 250x75x25x2.5"],
                 "lap_length_m": 0.75,
                 "lap_bolt_dia_mm": 16.0,
                 "lap_bolt_rows": 2,
@@ -100,6 +103,8 @@ class PurlinDesignTests(unittest.TestCase):
         result = run_purlin_design(data)
         lap = result["lap_design"]
 
+        self.assertTrue(lap["applicable"])
+        self.assertIn("Cold-formed", lap["method"])
         self.assertEqual(lap["bolt_count"], 4)
         self.assertAlmostEqual(lap["provided_lap_mm"], 750.0)
         self.assertAlmostEqual(lap["recommended_lap_mm"], 600.0)
@@ -108,16 +113,36 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertGreater(lap["group_capacity_kN"], lap["support_reaction_kN"])
         self.assertTrue(lap["overall_ok"])
 
-    def test_purlin_lap_length_can_govern_overall_status(self):
+    def test_purlin_lap_length_can_govern_cold_formed_overall_status(self):
+        data = dict(self.input_data)
+        data.update(
+            {
+                "span_m": 3.0,
+                "section_name": "CFLC 250x75x25x2.5",
+                "section_props": COLD_FORMED_C["CFLC 250x75x25x2.5"],
+                "lap_length_m": 0.25,
+            }
+        )
+
+        result = run_purlin_design(data)
+        lap = result["lap_design"]
+
+        self.assertTrue(lap["applicable"])
+        self.assertFalse(lap["lap_length_ok"])
+        self.assertFalse(lap["overall_ok"])
+        self.assertEqual(result["overall_status"], "UNSAFE")
+
+    def test_hot_rolled_sections_do_not_allow_nested_lap_design(self):
         data = dict(self.input_data)
         data.update({"lap_length_m": 0.25})
 
         result = run_purlin_design(data)
         lap = result["lap_design"]
 
-        self.assertFalse(lap["lap_length_ok"])
-        self.assertFalse(lap["overall_ok"])
-        self.assertEqual(result["overall_status"], "UNSAFE")
+        self.assertFalse(lap["applicable"])
+        self.assertTrue(lap["overall_ok"])
+        self.assertEqual(result["overall_status"], "SAFE")
+        self.assertIn("cold-formed lipped C/Z", lap["note"])
 
     def test_purlin_design_derives_radius_and_stability_checks(self):
         result = run_purlin_design(self.input_data)
@@ -262,15 +287,6 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(any(b"12.37" in page for page in decoded_pages))
         self.assertTrue(any(b"Self-weight note" in page for page in decoded_pages))
         self.assertTrue(any(b"LTB" in page for page in decoded_pages))
-
-    def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
-        result = run_purlin_design(self.input_data)
-        pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
-        decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
-
-        self.assertGreaterEqual(len(decoded_pages), 1)
-        self.assertIn(b"REFERENCES", decoded_pages[-1])
-        self.assertGreater(decoded_pages[-1].count(b" Tj"), 20)
 
     def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
         result = run_purlin_design(self.input_data)

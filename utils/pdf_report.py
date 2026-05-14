@@ -496,7 +496,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         ],
     ]
     lap = r.get("lap_design", {})
-    if lap:
+    if lap.get("applicable"):
         rows += [
             ["Purlin Lap Length", f"{lap.get('provided_lap_mm', 0.0):.0f} mm"],
             [
@@ -815,10 +815,10 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
 
     # ── 9. Purlin Lap / Splice Design ───────────────────────
     lap = r.get("lap_design", {})
-    if lap:
-        story += _section_heading(
-            "9.  PURLIN LAP / SPLICE DESIGN  [IS 800:2007 BOLTED CONNECTION]", s
-        )
+    story += _section_heading(
+        "9.  PURLIN LAP / SPLICE DESIGN  [COLD-FORMED C/Z ONLY]", s
+    )
+    if lap.get("applicable"):
         story += _formula_block(
             f"Method: {lap.get('method', 'Purlin lap/splice bolt group check at support')}\n\n"
             f"Lap length:\n"
@@ -856,6 +856,21 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
             "Purlin lap / splice design",
             "PASS" if lap.get("overall_ok") else "FAIL",
             bool(lap.get("overall_ok")),
+            s,
+        )
+    else:
+        story += _formula_block(
+            lap.get(
+                "note",
+                "Lap/nested continuity is only applicable to cold-formed lipped C/Z purlins.",
+            ),
+            s,
+            "Not applicable to the selected section family",
+        )
+        story += _result_box(
+            "Purlin lap / splice design",
+            "N/A — cold-formed lipped C/Z purlins only",
+            True,
             s,
         )
 

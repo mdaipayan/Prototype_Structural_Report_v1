@@ -307,6 +307,26 @@ def _stability_checks(
     }
 
 
+def _not_applicable_lap_design(sp: dict[str, Any]) -> dict[str, Any]:
+    section_family = sp.get("section_family", "Hot-rolled / built-up steel section")
+    return {
+        "applicable": False,
+        "method": "Not applicable for the selected purlin section family",
+        "section_family": section_family,
+        "overall_ok": True,
+        "bolt_utilisation": 0.0,
+        "support_reaction_kN": 0.0,
+        "group_capacity_kN": 0.0,
+        "note": (
+            "Lap/nested continuity is only permitted for cold-formed lipped C/Z "
+            "purlins that can physically nest over a support. Hot-rolled I, channel, "
+            "angle, and hollow sections cannot be treated as same-plane lapped purlins; "
+            "use a properly detailed bolted splice, seat, cleat, or select a cold-formed "
+            "C/Z purlin when a lapped continuous system is required."
+        ),
+    }
+
+
 def _bolt_lap_design(
     sp: dict[str, Any],
     Vz_kN: float,
@@ -319,14 +339,15 @@ def _bolt_lap_design(
     bolt_grade_fub: float,
     plate_fu: float,
 ) -> dict[str, Any]:
-    """Return a practical purlin lap/splice connection design check.
+    """Return a cold-formed purlin lap connection design check.
 
-    The lap is checked as a bolted purlin-to-purlin connection at a support.
-    The design action is conservatively taken as the resultant support reaction
-    from the governing purlin load case, shared equally by the provided bolts.
-    Bolt shear and bearing capacities follow the IS 800:2007 bearing-bolt format
-    using conservative default edge/pitch detailing when the UI does not expose
-    those dimensions.
+    Same-plane lap/nested continuity is physically applicable only to cold-formed
+    lipped C/Z purlins. Hot-rolled sections such as ISMB members do not nest and
+    must use a separate splice/seat/cleat detail instead of this lap check. For
+    eligible cold-formed C/Z purlins, the lap is checked as a bolted
+    purlin-to-purlin connection at a support. The design action is
+    conservatively taken as the resultant support reaction from the governing
+    purlin load case, shared equally by the provided bolts.
     """
     span_mm = max(span_m * 1000.0, 0.0)
     provided_lap_mm = max(lap_length_m * 1000.0, 0.0)
@@ -376,7 +397,8 @@ def _bolt_lap_design(
     overall_ok = lap_length_ok and bolts_ok and detailing_ok
 
     return {
-        "method": "Purlin lap/splice bolt group check at support",
+        "applicable": True,
+        "method": "Cold-formed C/Z nested purlin lap bolt group check at support",
         "provided_lap_mm": provided_lap_mm,
         "recommended_lap_mm": recommended_lap_mm,
         "lap_length_ok": lap_length_ok,
@@ -555,17 +577,21 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
             cold_formed_checks["checks"].values()
         )
 
-    lap_design = _bolt_lap_design(
-        sp,
-        Vz_kN,
-        Vy_kN,
-        span_m,
-        lap_length_m,
-        lap_bolt_dia_mm,
-        lap_bolt_rows,
-        lap_bolts_per_row,
-        lap_bolt_grade_fub,
-        lap_plate_fu,
+    lap_design = (
+        _bolt_lap_design(
+            sp,
+            Vz_kN,
+            Vy_kN,
+            span_m,
+            lap_length_m,
+            lap_bolt_dia_mm,
+            lap_bolt_rows,
+            lap_bolts_per_row,
+            lap_bolt_grade_fub,
+            lap_plate_fu,
+        )
+        if cold_formed
+        else _not_applicable_lap_design(sp)
     )
 
     checks_ok = [
