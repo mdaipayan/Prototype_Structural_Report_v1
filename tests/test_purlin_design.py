@@ -1,5 +1,9 @@
+import base64
 import math
+import re
 import unittest
+import zlib
+from pathlib import Path
 
 from reportlab.platypus import CondPageBreak
 
@@ -11,8 +15,45 @@ from utils.sections import (
     COMMON_PURLIN_SECTION_TYPES,
     HOLLOW_BOX,
     ISA,
+    ISLB,
     ISMB,
+    ISMC,
 )
+
+
+def _decoded_pdf_page_streams(pdf_bytes: bytes) -> list[bytes]:
+    """Return decoded ReportLab page content streams in page order."""
+    pages_match = re.search(rb"/Count \d+ /Kids \[([^\]]+)\]", pdf_bytes)
+    if not pages_match:
+        return []
+
+    page_ids = [int(match) for match in re.findall(rb"(\d+) 0 R", pages_match.group(1))]
+    decoded_pages = []
+    for page_id in page_ids:
+        page_match = re.search(rf"{page_id} 0 obj(.*?)endobj".encode(), pdf_bytes, re.S)
+        if not page_match:
+            continue
+        content_match = re.search(rb"/Contents (\d+) 0 R", page_match.group(1))
+        if not content_match:
+            decoded_pages.append(b"")
+            continue
+
+        content_id = int(content_match.group(1))
+        content_match = re.search(
+            rf"{content_id} 0 obj(.*?)endobj".encode(), pdf_bytes, re.S
+        )
+        if not content_match:
+            decoded_pages.append(b"")
+            continue
+
+        stream = (
+            content_match.group(1)
+            .split(b"stream\n", 1)[1]
+            .split(b"endstream", 1)[0]
+            .strip()
+        )
+        decoded_pages.append(zlib.decompress(base64.a85decode(stream, adobe=True)))
+    return decoded_pages
 
 
 class PurlinDesignTests(unittest.TestCase):
@@ -44,6 +85,123 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(result["shear_ok"])
         self.assertTrue(result["defl_ok"])
         self.assertTrue(math.isclose(result["sw_kNm"], 44.2 * 9.81 / 1000.0))
+
+    def test_purlin_design_includes_lap_splice_check_for_cold_formed_only(self):
+        data = dict(self.input_data)
+        data.update(
+            {
+                "span_m": 3.0,
+                "section_name": "CFLC 250x75x25x2.5",
+                "section_props": COLD_FORMED_C["CFLC 250x75x25x2.5"],
+                "lap_length_m": 0.75,
+                "lap_bolt_dia_mm": 16.0,
+                "lap_bolt_rows": 2,
+                "lap_bolts_per_row": 2,
+                "lap_bolt_grade_fub": 400.0,
+                "lap_plate_fu": 410.0,
+            }
+        )
+
+        result = run_purlin_design(data)
+        lap = result["lap_design"]
+
+        self.assertTrue(lap["applicable"])
+        self.assertIn("Cold-formed", lap["method"])
+        self.assertEqual(lap["bolt_count"], 4)
+        self.assertAlmostEqual(lap["provided_lap_mm"], 750.0)
+        self.assertAlmostEqual(lap["recommended_lap_mm"], 600.0)
+        self.assertTrue(lap["lap_length_ok"])
+        self.assertGreater(lap["support_reaction_kN"], result["Vz_kN"])
+        self.assertGreater(lap["group_capacity_kN"], lap["support_reaction_kN"])
+        self.assertTrue(lap["overall_ok"])
+
+    def test_purlin_lap_length_can_govern_cold_formed_overall_status(self):
+        data = dict(self.input_data)
+        data.update(
+            {
+                "span_m": 3.0,
+                "section_name": "CFLC 250x75x25x2.5",
+                "section_props": COLD_FORMED_C["CFLC 250x75x25x2.5"],
+                "lap_length_m": 0.25,
+            }
+        )
+
+        result = run_purlin_design(data)
+        lap = result["lap_design"]
+
+        self.assertTrue(lap["applicable"])
+        self.assertFalse(lap["lap_length_ok"])
+        self.assertFalse(lap["overall_ok"])
+        self.assertEqual(result["overall_status"], "UNSAFE")
+
+    def test_hot_rolled_sections_do_not_allow_nested_lap_design(self):
+        data = dict(self.input_data)
+        data.update({"lap_length_m": 0.25})
+
+        result = run_purlin_design(data)
+        lap = result["lap_design"]
+
+        self.assertFalse(lap["applicable"])
+        self.assertTrue(lap["overall_ok"])
+        self.assertEqual(result["overall_status"], "SAFE")
+        self.assertIn("cold-formed lipped C/Z", lap["note"])
+
+    def test_purlin_design_derives_radius_and_stability_checks(self):
+        result = run_purlin_design(self.input_data)
+
+        self.assertAlmostEqual(result["rxx_cm"], math.sqrt(8603.0 / 56.2))
+        self.assertAlmostEqual(result["ryy_cm"], math.sqrt(453.0 / 56.2))
+        self.assertTrue(result["stability_checks"]["wind_uplift_present"])
+        self.assertTrue(result["stability_checks"]["overall_ok"])
+        self.assertGreater(result["stability_checks"]["uplift_moment_kNm"], 0.0)
+
+    def test_self_weight_and_restraint_inputs_can_govern_purlin_design(self):
+        data = dict(self.input_data)
+        data.update(
+            {
+                "dead_load_excludes_self_weight": False,
+                "top_flange_restrained": False,
+                "bottom_flange_restrained": False,
+            }
+        )
+
+        result = run_purlin_design(data)
+
+        self.assertEqual(result["sw_added_kNm"], 0.0)
+        self.assertLess(
+            result["w_dl_total"],
+            self.input_data["dead_load"] * self.input_data["spacing_m"]
+            + result["sw_kNm"],
+        )
+        self.assertFalse(result["stability_checks"]["overall_ok"])
+        self.assertEqual(result["overall_status"], "UNSAFE")
+
+    def test_ai_economy_prediction_recommends_lighter_safe_sections(self):
+        data = dict(self.input_data)
+        data["candidate_sections"] = {
+            "ISMB": ISMB,
+            "ISLB": ISLB,
+            "ISMC": ISMC,
+            "ISA": ISA,
+            "Cold C": COLD_FORMED_C,
+            "Cold Z": COLD_FORMED_Z,
+            "Box": HOLLOW_BOX,
+        }
+
+        result = run_purlin_design(data)
+        economy = result["economy_prediction"]
+
+        self.assertFalse(economy["current_economical"])
+        self.assertIn("not the most economical", economy["verdict"])
+        self.assertGreater(economy["safe_candidate_count"], 0)
+        self.assertLess(
+            economy["best_section"]["weight_kg_m"],
+            result["section_props"]["weight"],
+        )
+        self.assertEqual(
+            economy["recommendations"],
+            sorted(economy["recommendations"], key=lambda item: item["weight_kg_m"]),
+        )
 
     def test_common_purlin_section_guidance_lists_is_based_families(self):
         designations = {item["designation"] for item in COMMON_PURLIN_SECTION_TYPES}
@@ -124,6 +282,19 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertIn("effective-width", is801_result["design_standard"])
         self.assertIn("overall_ok", is801_result["cold_formed_checks"]["checks"])
 
+    def test_purlin_page_refreshes_existing_result_when_inputs_change(self):
+        page_source = Path("pages/1_Purlin_Design.py").read_text()
+
+        self.assertIn(
+            'st.session_state.get("purlin_input") != current_input', page_source
+        )
+        self.assertIn(
+            "_store_current_purlin_design(show_refresh_notice=True)", page_source
+        )
+        self.assertIn(
+            "pdf_bytes = generate_purlin_pdf(r, project=project_name)", page_source
+        )
+
     def test_pdf_topic_headers_request_page_break_space(self):
         styles = _styles()
         section_flowables = _section_heading("TEST SECTION", styles)
@@ -135,11 +306,29 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(styles["h2"].keepWithNext)
 
     def test_pdf_report_generation_uses_calculation_output(self):
-        result = run_purlin_design(self.input_data)
+        data = dict(self.input_data)
+        data["candidate_sections"] = {"ISMB": ISMB, "ISLB": ISLB, "Cold Z": COLD_FORMED_Z}
+        result = run_purlin_design(data)
         pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
+
+        decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
 
         self.assertGreater(len(pdf_bytes), 5000)
         self.assertEqual(pdf_bytes[:4], b"%PDF")
+        self.assertTrue(any(b"12.37" in page for page in decoded_pages))
+        self.assertTrue(any(b"Self-weight note" in page for page in decoded_pages))
+        self.assertTrue(any(b"LTB" in page for page in decoded_pages))
+        self.assertTrue(any(b"AI ECONOMY PREDICTOR" in page for page in decoded_pages))
+        self.assertTrue(any(b"Top Safe Economical Alternatives" in page for page in decoded_pages))
+
+    def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
+        result = run_purlin_design(self.input_data)
+        pdf_bytes = generate_purlin_pdf(result, project="Unit Test Project")
+        decoded_pages = _decoded_pdf_page_streams(pdf_bytes)
+
+        self.assertGreaterEqual(len(decoded_pages), 1)
+        self.assertIn(b"REFERENCES", decoded_pages[-1])
+        self.assertGreater(decoded_pages[-1].count(b" Tj"), 20)
 
 
 if __name__ == "__main__":
