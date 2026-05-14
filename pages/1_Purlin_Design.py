@@ -63,7 +63,7 @@ section[data-testid="stSidebar"] input::placeholder{color:#51677D!important;opac
 st.markdown(
     """
 <div style="background:linear-gradient(90deg,#1A3557,#2E6DA4);padding:22px 26px;border-radius:14px;margin-bottom:14px;color:white;">
-  <h1 style="margin:0;color:white;">📐 Purlin Design — IS 800:2007</h1>
+  <h1 style="margin:0;color:white;">📐 Purlin Design — IS 800:2007 / IS 801:1975</h1>
   <p style="margin:6px 0 0;color:#D6E8F7;">Step-by-step roof purlin loading, biaxial bending, shear, deflection, and PDF report generation.</p>
 </div>
 """,
@@ -71,7 +71,7 @@ st.markdown(
 )
 st.caption(
     "Loading: IS 875 Pt.1 (DL) + Pt.2 (LL) + Pt.3 (Wind)  |  "
-    "Section check: IS 800:2007 Cl. 8.2.1, 9.3.1.1, 8.4.1  |  "
+    "Section check: IS 800:2007 or IS 801:1975 cold-formed mode  |  "
     "Sections: SP 6(1):1964 / IS 808:1989"
 )
 
@@ -180,6 +180,12 @@ with c3:
         0.01,
         help="IS 800 Cl.5.4.1 — Partial safety factor for resistance",
     )
+    design_code = st.selectbox(
+        "Purlin Design Code",
+        ["IS 800:2007", "IS 801:1975"],
+        index=0,
+        help="Use IS 801:1975 for cold-formed lipped C/Z effective-width design. Other sections remain on IS 800:2007.",
+    )
 
     all_sec_types = {
         "ISMB (I-Beam)": ISMB,
@@ -197,6 +203,18 @@ with c3:
         "Section Designation", sec_names, index=min(4, len(sec_names) - 1)
     )
     sp = sec_dict[sec_name]
+    cold_formed_selected = sp.get("section_family") in {
+        "Cold-formed C-sections",
+        "Cold-formed Z-sections",
+    }
+    if design_code == "IS 801:1975" and cold_formed_selected:
+        st.info(
+            "IS 801:1975 mode enabled: lipped C/Z checks will use effective-width cold-formed design."
+        )
+    elif design_code == "IS 801:1975":
+        st.warning(
+            "IS 801:1975 applies to cold-formed lipped C/Z sections only. This selected section will be checked as per IS 800:2007."
+        )
 
     with st.expander("📋 Section Properties (auto-filled from section database)"):
         col_a, col_b = st.columns(2)
@@ -256,6 +274,7 @@ if st.button("▶  Run Purlin Design", use_container_width=True, type="primary")
         "gm0": gm0,
         "section_name": sec_name,
         "section_props": sp,
+        "design_code": design_code,
     }
     r = run_purlin_design(inp)
     st.session_state["purlin_result"] = r

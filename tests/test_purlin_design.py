@@ -102,6 +102,28 @@ class PurlinDesignTests(unittest.TestCase):
                 else:
                     self.assertIn("gross-section", result["design_standard"])
 
+    def test_design_code_selection_controls_cold_formed_checks(self):
+        data = dict(self.input_data)
+        data.update(
+            {
+                "span_m": 3.0,
+                "section_name": "CFLC 250x75x25x2.5",
+                "section_props": COLD_FORMED_C["CFLC 250x75x25x2.5"],
+                "design_code": "IS 800:2007",
+            }
+        )
+
+        is800_result = run_purlin_design(data)
+        self.assertEqual(is800_result["design_code"], "IS 800:2007")
+        self.assertIn("gross-section", is800_result["design_standard"])
+        self.assertEqual(is800_result["cold_formed_checks"], {})
+
+        data["design_code"] = "IS 801:1975"
+        is801_result = run_purlin_design(data)
+        self.assertEqual(is801_result["design_code"], "IS 801:1975")
+        self.assertIn("effective-width", is801_result["design_standard"])
+        self.assertIn("overall_ok", is801_result["cold_formed_checks"]["checks"])
+
     def test_pdf_topic_headers_request_page_break_space(self):
         styles = _styles()
         section_flowables = _section_heading("TEST SECTION", styles)

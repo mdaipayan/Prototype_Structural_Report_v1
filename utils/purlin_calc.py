@@ -264,6 +264,10 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     cpi = _as_float(inp.get("Cp_int", inp.get("Cpi")), 0.2)
     fy = _as_float(inp.get("fy"), 250.0)
     gm0 = _as_float(inp.get("gm0"), 1.10)
+    requested_design_code = inp.get("design_code")
+    requested_design_code = (
+        str(requested_design_code).strip() if requested_design_code is not None else None
+    )
 
     theta = math.radians(slope_deg)
     cos_t = math.cos(theta)
@@ -310,6 +314,14 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     L_mm = span_m * 1000.0
     service_w = wz_DL + wz_LL  # kN/m == N/mm
     cold_formed = sp.get("section_family") in COLD_FORMED_FAMILIES
+    # Preserve legacy/API behavior: cold-formed C/Z sections use IS 801
+    # effective-width checks unless the caller explicitly requests IS 800.
+    # The Streamlit UI always sends an explicit selection.
+    design_code = (
+        "IS 801:1975"
+        if cold_formed and requested_design_code != "IS 800:2007"
+        else "IS 800:2007"
+    )
     cold_formed_checks: dict[str, Any] = {}
 
     Mdz_kNm = z_major * fy / (gm0 * 1000.0) if gm0 else 0.0
@@ -321,7 +333,7 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     shear_ratio = _safe_ratio(Vz_kN, Vd_kN)
     Ixx_design_cm4 = _as_float(sp.get("Ixx"))
 
-    if cold_formed:
+    if design_code == "IS 801:1975":
         cold_formed_checks = _cold_formed_design_checks(
             sp, fy, gm0, Mz_kNm, My_kNm, Vz_kN, service_w, L_mm
         )
@@ -342,19 +354,19 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     delta_max_mm = (
         (5.0 * service_w * L_mm**4 / (384.0 * E * Ixx_mm4)) if Ixx_mm4 else math.inf
     )
-    if cold_formed and cold_formed_checks:
+    if design_code == "IS 801:1975" and cold_formed_checks:
         cold_formed_checks["delta_eff_mm"] = delta_max_mm
     delta_limit_mm = L_mm / 180.0
     defl_ratio = _safe_ratio(delta_max_mm, delta_limit_mm)
     defl_ok = defl_ratio <= 1.0
-    if cold_formed and cold_formed_checks:
+    if design_code == "IS 801:1975" and cold_formed_checks:
         cold_formed_checks["checks"]["serviceability_ok"] = defl_ok
         cold_formed_checks["checks"]["overall_ok"] = all(
             cold_formed_checks["checks"].values()
         )
 
     checks_ok = [biaxial_ok, shear_ok, defl_ok, cls["overall"] != "Slender"]
-    if cold_formed:
+    if design_code == "IS 801:1975":
         checks_ok.append(bool(cold_formed_checks.get("checks", {}).get("overall_ok")))
     overall_status = "SAFE" if all(checks_ok) else "UNSAFE"
 
@@ -400,7 +412,12 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         "Vz_kN": Vz_kN,
         "Vy_kN": Vy_kN,
         "section_class": cls,
-        "design_standard": sp.get("design_standard", "IS 800:2007 gross-section check"),
+        "design_code": design_code,
+        "design_standard": (
+            sp.get("design_standard", "IS 801:1975 effective-width cold-formed design")
+            if design_code == "IS 801:1975"
+            else "IS 800:2007 gross-section steel design check"
+        ),
         "design_note": sp.get("design_note", ""),
         "use_plastic_modulus": use_plastic,
         "cold_formed_checks": cold_formed_checks,
