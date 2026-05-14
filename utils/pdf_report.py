@@ -486,7 +486,25 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         ["Yield Strength (fy)", f"{r['fy']:.0f} MPa  [IS 2062 E250]"],
         ["Partial Safety Factor (γm0)", f"{r['gm0']:.2f}  [IS 800 Cl. 5.4.1]"],
         ["Modulus of Elasticity (E)", "2×10⁵ MPa"],
+        [
+            "Purlin Self Weight Handling",
+            (
+                "Added separately"
+                if r.get("dead_load_excludes_self_weight", True)
+                else "Already included in DL; not added again"
+            ),
+        ],
     ]
+    lap = r.get("lap_design", {})
+    if lap:
+        rows += [
+            ["Purlin Lap Length", f"{lap.get('provided_lap_mm', 0.0):.0f} mm"],
+            [
+                "Lap Bolt Group",
+                f"{lap.get('bolt_rows', 0)} rows × {lap.get('bolts_per_row', 0)} bolts, "
+                f"Ø{lap.get('bolt_dia_mm', 0.0):.0f} mm",
+            ],
+        ]
     story += _input_table(rows, s, "1.1  Loading & Material Data")
 
     sec_rows = [
@@ -502,8 +520,8 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         ["Elastic Mod. Zyy", f"{sp.get('Zyy', 0.0):.2f} cm³"],
         ["Plastic Mod. Zpx", f"{sp.get('Zpx', 0.0):.2f} cm³"],
         ["Plastic Mod. Zpy", f"{sp.get('Zpy', 0.0):.2f} cm³"],
-        ["Radius of Gyration rxx (rzz)", f"{sp.get('rxx', 0.0):.2f} cm"],
-        ["Radius of Gyration ryy", f"{sp.get('ryy', 0.0):.2f} cm"],
+        ["Radius of Gyration rxx (rzz)", f"{r.get('rxx_cm', 0.0):.2f} cm"],
+        ["Radius of Gyration ryy", f"{r.get('ryy_cm', 0.0):.2f} cm"],
         [
             "Self Weight",
             f"{sp.get('weight', 0.0):.1f} kg/m  [{r.get('sw_kNm', 0.0):.4f} kN/m]",
@@ -530,12 +548,20 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     ]
 
     story += _formula_block(
-        "w_DL  = DL × s + SW  =  "
-        f"{r['dead_load']:.2f} × {r['spacing_m']:.2f} + {r['sw_kNm']:.4f}  =  "
+        "w_DL  = DL × s + SW_added  =  "
+        f"{r['dead_load']:.2f} × {r['spacing_m']:.2f} + {r.get('sw_added_kNm', r['sw_kNm']):.4f}  =  "
         f"{r['wz_DL'] / math.cos(math.radians(r['slope_deg'])):.4f} kN/m  (total)",
         s,
         "IS 875 Pt.1",
     )
+    story += [
+        Paragraph(
+            "Self-weight note: selected-section self-weight is added only when the dead load input excludes purlin self-weight. "
+            "If the project DL already includes a purlin allowance, set the input accordingly to avoid double-counting.",
+            s["ref"],
+        ),
+        Spacer(1, 3),
+    ]
     story += _formula_block(
         f"w_z,DL = w_DL × cos θ  =  {r['wz_DL']:.4f} kN/m  (perp. to slope → Mz)", s
     )
@@ -693,6 +719,48 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         s,
     )
 
+    # ── 6.1 LTB / Uplift Restraint Check ───────────────────
+    stability = r.get("stability_checks", {})
+    if stability:
+        story += _section_heading(
+            "6.1  LTB & WIND UPLIFT RESTRAINT CHECK  [IS 800:2007 Cl. 8.2.2]",
+            s,
+        )
+        story += _formula_block(
+            f"Full section capacity assumption:\n"
+            f"  Top compression flange restrained = {'YES' if stability.get('top_flange_restrained') else 'NO'}\n"
+            f"  Bottom/uplift flange restraint provided = {'YES' if stability.get('bottom_flange_restrained') else 'NO'}\n\n"
+            f"Wind uplift reversal:\n"
+            f"  Governing uplift combo = {stability.get('governing_uplift_combo', 'None')}\n"
+            f"  wz,uplift = {stability.get('governing_uplift_wz_kNm', 0.0):.4f} kN/m\n"
+            f"  Mz,uplift = |wz,uplift| × L² / 8 = {stability.get('uplift_moment_kNm', 0.0):.4f} kNm\n"
+            f"  Mz,uplift / Mdz = {stability.get('uplift_ratio', 0.0):.4f}\n\n"
+            f"Note: {stability.get('note', '')}",
+            s,
+            "IS 800 Cl. 8.2.2",
+        )
+        stability_rows = [
+            [
+                "Gravity/top-flange LTB restraint",
+                "PASS" if stability.get("ltb_ok") else "FAIL",
+            ],
+            [
+                "Wind uplift bottom-flange bracing",
+                "PASS" if stability.get("uplift_bracing_ok") else "FAIL",
+            ],
+            [
+                "Uplift moment vs major-axis capacity",
+                "PASS" if stability.get("uplift_capacity_ok") else "FAIL",
+            ],
+        ]
+        story += _input_table(stability_rows, s, "6.1.1  Stability/Uplift Summary")
+        story += _result_box(
+            "LTB / wind uplift restraint assumptions",
+            "PASS" if stability.get("overall_ok") else "FAIL",
+            bool(stability.get("overall_ok")),
+            s,
+        )
+
     # ── 7. Shear Check ──────────────────────────────────────
     story += _section_heading("7.  SHEAR CAPACITY CHECK  [IS 800:2007 Cl. 8.4.1]", s)
     story += _formula_block(
@@ -745,11 +813,57 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         s,
     )
 
+    # ── 9. Purlin Lap / Splice Design ───────────────────────
+    lap = r.get("lap_design", {})
+    if lap:
+        story += _section_heading(
+            "9.  PURLIN LAP / SPLICE DESIGN  [IS 800:2007 BOLTED CONNECTION]", s
+        )
+        story += _formula_block(
+            f"Method: {lap.get('method', 'Purlin lap/splice bolt group check at support')}\n\n"
+            f"Lap length:\n"
+            f"  Provided lap = {lap.get('provided_lap_mm', 0.0):.0f} mm\n"
+            f"  Recommended minimum = max(0.10L, 600) = max(0.10 × {r['span_m'] * 1000:.0f}, 600) "
+            f"= {lap.get('recommended_lap_mm', 0.0):.0f} mm\n\n"
+            f"Bolt group:\n"
+            f"  Bolts = {lap.get('bolt_rows', 0)} rows × {lap.get('bolts_per_row', 0)} per row "
+            f"= {lap.get('bolt_count', 0)} bolts\n"
+            f"  Diameter = {lap.get('bolt_dia_mm', 0.0):.0f} mm, hole = {lap.get('hole_dia_mm', 0.0):.0f} mm, "
+            f"fub = {lap.get('bolt_grade_fub', 0.0):.0f} MPa\n\n"
+            f"Resultant support reaction:\n"
+            f"  R = √(Vz² + Vy²) = √({r['Vz_kN']:.4f}² + {r['Vy_kN']:.4f}²) "
+            f"= {lap.get('support_reaction_kN', 0.0):.4f} kN\n\n"
+            f"Bolt capacity per bolt:\n"
+            f"  Vdsb = fub × Anb / (√3 × γmb) = {lap.get('bolt_shear_capacity_kN', 0.0):.4f} kN\n"
+            f"  Vdpb = 2.5 × kb × d × t × fu / γmb = {lap.get('bolt_bearing_capacity_kN', 0.0):.4f} kN\n"
+            f"  Vbolt = min(Vdsb, Vdpb) = {lap.get('bolt_capacity_kN', 0.0):.4f} kN\n\n"
+            f"Group capacity:\n"
+            f"  Vgroup = n × Vbolt = {lap.get('group_capacity_kN', 0.0):.4f} kN\n"
+            f"  Utilisation = R / Vgroup = {lap.get('bolt_utilisation', 0.0):.4f}",
+            s,
+            "IS 800:2007 bolted connection check",
+        )
+        lap_rows = [
+            ["Lap length", "PASS" if lap.get("lap_length_ok") else "FAIL"],
+            ["Bolt shear / bearing", "PASS" if lap.get("bolts_ok") else "FAIL"],
+            [
+                "Minimum edge / pitch detailing",
+                "PASS" if lap.get("detailing_ok") else "FAIL",
+            ],
+        ]
+        story += _input_table(lap_rows, s, "9.1  Lap Design Summary")
+        story += _result_box(
+            "Purlin lap / splice design",
+            "PASS" if lap.get("overall_ok") else "FAIL",
+            bool(lap.get("overall_ok")),
+            s,
+        )
+
     if r.get("cold_formed_checks"):
         cf = r["cold_formed_checks"]
         cf_checks = cf.get("checks", {})
         story += _section_heading(
-            "9.  COLD-FORMED EFFECTIVE-WIDTH & STABILITY CHECKS", s
+            "10.  COLD-FORMED EFFECTIVE-WIDTH & STABILITY CHECKS", s
         )
         story += _formula_block(
             f"Method: {cf.get('method', 'IS 801 effective-width checks')}\n\n"
@@ -792,7 +906,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
                 "PASS" if cf_checks.get("serviceability_ok") else "FAIL",
             ],
         ]
-        story += _input_table(cf_rows, s, "9.1  Cold-formed Check Summary")
+        story += _input_table(cf_rows, s, "10.1  Cold-formed Check Summary")
         story += _result_box(
             "Cold-formed effective-width/stability checks",
             "PASS" if cf_checks.get("overall_ok") else "FAIL",
@@ -817,13 +931,9 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     ]
     for ref in refs:
         story.append(Paragraph(f"• {ref}", s["ref"]))
-    story.append(Spacer(1, 12))
-    story.append(
-        Paragraph(
-            "Generated by IS Steel Design Suite | For engineering use only — verify against current code provisions.",
-            s["footer"],
-        )
-    )
+    # The page decorator already prints the generated-by footer on every page.
+    # Avoid adding a trailing story footer because it can be pushed onto an
+    # otherwise blank final page when the references just fill the prior page.
 
     _build_pdf(doc, story, "Purlin Design Report")
     return buf.getvalue()
