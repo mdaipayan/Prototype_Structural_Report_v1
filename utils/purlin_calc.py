@@ -11,7 +11,6 @@ from __future__ import annotations
 import math
 from typing import Any
 
-
 SECTION_CLASS_ORDER = {"Plastic": 1, "Compact": 2, "Semi-compact": 3, "Slender": 4}
 
 
@@ -245,6 +244,111 @@ def _safe_ratio(numerator: float, denominator: float) -> float:
     return numerator / denominator
 
 
+def _bolt_lap_design(
+    sp: dict[str, Any],
+    Vz_kN: float,
+    Vy_kN: float,
+    span_m: float,
+    lap_length_m: float,
+    bolt_dia_mm: float,
+    bolt_rows: float,
+    bolts_per_row: float,
+    bolt_grade_fub: float,
+    plate_fu: float,
+) -> dict[str, Any]:
+    """Return a practical purlin lap/splice connection design check.
+
+    The lap is checked as a bolted purlin-to-purlin connection at a support.
+    The design action is conservatively taken as the resultant support reaction
+    from the governing purlin load case, shared equally by the provided bolts.
+    Bolt shear and bearing capacities follow the IS 800:2007 bearing-bolt format
+    using conservative default edge/pitch detailing when the UI does not expose
+    those dimensions.
+    """
+    span_mm = max(span_m * 1000.0, 0.0)
+    provided_lap_mm = max(lap_length_m * 1000.0, 0.0)
+    recommended_lap_mm = max(0.10 * span_mm, 600.0)
+    lap_length_ok = provided_lap_mm >= recommended_lap_mm
+
+    d = max(bolt_dia_mm, 0.0)
+    hole_dia = d + 2.0 if d <= 24.0 else d + 3.0
+    rows = max(int(round(bolt_rows)), 0)
+    per_row = max(int(round(bolts_per_row)), 0)
+    bolt_count = rows * per_row
+    gamma_mb = 1.25
+    threads_area = 0.78 * math.pi * d**2 / 4.0
+    shank_area = math.pi * d**2 / 4.0
+    shear_capacity_kN = (
+        bolt_grade_fub * threads_area / (math.sqrt(3.0) * gamma_mb * 1000.0)
+        if d > 0 and bolt_grade_fub > 0
+        else 0.0
+    )
+
+    t = _as_float(sp.get("tw"), _as_float(sp.get("tf"), 0.0))
+    edge_mm = 1.7 * hole_dia
+    pitch_mm = 3.0 * d
+    kb_terms = [
+        _safe_ratio(edge_mm, 3.0 * hole_dia),
+        _safe_ratio(pitch_mm, 3.0 * hole_dia) - 0.25,
+        _safe_ratio(bolt_grade_fub, plate_fu),
+        1.0,
+    ]
+    kb = _clamp(min(kb_terms), 0.0, 1.0)
+    bearing_capacity_kN = (
+        2.5 * kb * d * t * plate_fu / (gamma_mb * 1000.0)
+        if d > 0 and t > 0 and plate_fu > 0
+        else 0.0
+    )
+    bolt_capacity_kN = min(shear_capacity_kN, bearing_capacity_kN)
+
+    support_reaction_kN = math.hypot(Vz_kN, Vy_kN)
+    demand_per_bolt_kN = _safe_ratio(support_reaction_kN, bolt_count)
+    group_capacity_kN = bolt_count * bolt_capacity_kN
+    bolt_utilisation = _safe_ratio(support_reaction_kN, group_capacity_kN)
+    bolts_ok = bolt_utilisation <= 1.0
+
+    end_distance_ok = edge_mm >= 1.5 * hole_dia
+    pitch_ok = pitch_mm >= 2.5 * d if d > 0 else False
+    detailing_ok = end_distance_ok and pitch_ok
+    overall_ok = lap_length_ok and bolts_ok and detailing_ok
+
+    return {
+        "method": "Purlin lap/splice bolt group check at support",
+        "provided_lap_mm": provided_lap_mm,
+        "recommended_lap_mm": recommended_lap_mm,
+        "lap_length_ok": lap_length_ok,
+        "bolt_dia_mm": d,
+        "hole_dia_mm": hole_dia,
+        "bolt_rows": rows,
+        "bolts_per_row": per_row,
+        "bolt_count": bolt_count,
+        "bolt_grade_fub": bolt_grade_fub,
+        "plate_fu": plate_fu,
+        "connected_thickness_mm": t,
+        "edge_mm": edge_mm,
+        "pitch_mm": pitch_mm,
+        "kb": kb,
+        "threads_area_mm2": threads_area,
+        "shank_area_mm2": shank_area,
+        "bolt_shear_capacity_kN": shear_capacity_kN,
+        "bolt_bearing_capacity_kN": bearing_capacity_kN,
+        "bolt_capacity_kN": bolt_capacity_kN,
+        "support_reaction_kN": support_reaction_kN,
+        "demand_per_bolt_kN": demand_per_bolt_kN,
+        "group_capacity_kN": group_capacity_kN,
+        "bolt_utilisation": bolt_utilisation,
+        "bolts_ok": bolts_ok,
+        "end_distance_ok": end_distance_ok,
+        "pitch_ok": pitch_ok,
+        "detailing_ok": detailing_ok,
+        "overall_ok": overall_ok,
+        "note": (
+            "Recommended lap length is the greater of 10% of span and 600 mm. "
+            "Bolt action uses the resultant support reaction from the governing load case."
+        ),
+    }
+
+
 def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     """Run purlin design checks and return all values needed by UI/PDF.
 
@@ -266,8 +370,16 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
     gm0 = _as_float(inp.get("gm0"), 1.10)
     requested_design_code = inp.get("design_code")
     requested_design_code = (
-        str(requested_design_code).strip() if requested_design_code is not None else None
+        str(requested_design_code).strip()
+        if requested_design_code is not None
+        else None
     )
+    lap_length_m = _as_float(inp.get("lap_length_m"), max(0.10 * span_m, 0.60))
+    lap_bolt_dia_mm = _as_float(inp.get("lap_bolt_dia_mm"), 16.0)
+    lap_bolt_rows = _as_float(inp.get("lap_bolt_rows"), 2.0)
+    lap_bolts_per_row = _as_float(inp.get("lap_bolts_per_row"), 2.0)
+    lap_bolt_grade_fub = _as_float(inp.get("lap_bolt_grade_fub"), 400.0)
+    lap_plate_fu = _as_float(inp.get("lap_plate_fu"), 410.0)
 
     theta = math.radians(slope_deg)
     cos_t = math.cos(theta)
@@ -365,7 +477,26 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
             cold_formed_checks["checks"].values()
         )
 
-    checks_ok = [biaxial_ok, shear_ok, defl_ok, cls["overall"] != "Slender"]
+    lap_design = _bolt_lap_design(
+        sp,
+        Vz_kN,
+        Vy_kN,
+        span_m,
+        lap_length_m,
+        lap_bolt_dia_mm,
+        lap_bolt_rows,
+        lap_bolts_per_row,
+        lap_bolt_grade_fub,
+        lap_plate_fu,
+    )
+
+    checks_ok = [
+        biaxial_ok,
+        shear_ok,
+        defl_ok,
+        cls["overall"] != "Slender",
+        lap_design["overall_ok"],
+    ]
     if design_code == "IS 801:1975":
         checks_ok.append(bool(cold_formed_checks.get("checks", {}).get("overall_ok")))
     overall_status = "SAFE" if all(checks_ok) else "UNSAFE"
@@ -436,4 +567,5 @@ def run_purlin_design(inp: dict[str, Any]) -> dict[str, Any]:
         "delta_limit_mm": delta_limit_mm,
         "defl_ratio": defl_ratio,
         "defl_ok": defl_ok,
+        "lap_design": lap_design,
     }
