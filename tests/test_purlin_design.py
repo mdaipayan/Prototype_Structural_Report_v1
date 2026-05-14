@@ -1,5 +1,6 @@
 import math
 import unittest
+from pathlib import Path
 
 from reportlab.platypus import CondPageBreak
 
@@ -158,6 +159,19 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertEqual(is801_result["design_code"], "IS 801:1975")
         self.assertIn("effective-width", is801_result["design_standard"])
         self.assertIn("overall_ok", is801_result["cold_formed_checks"]["checks"])
+
+    def test_purlin_page_refreshes_existing_result_when_inputs_change(self):
+        page_source = Path("pages/1_Purlin_Design.py").read_text()
+
+        self.assertIn(
+            'st.session_state.get("purlin_input") != current_input', page_source
+        )
+        self.assertIn(
+            "_store_current_purlin_design(show_refresh_notice=True)", page_source
+        )
+        self.assertIn(
+            "pdf_bytes = generate_purlin_pdf(r, project=project_name)", page_source
+        )
 
     def test_pdf_topic_headers_request_page_break_space(self):
         styles = _styles()

@@ -283,32 +283,48 @@ st.info(
 
 
 # ── Run Calculation ────────────────────────────────────────────────────────
-if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):
-    inp = {
-        "span_m": span,
-        "spacing_m": spacing,
-        "roof_slope_deg": slope,
-        "dead_load": dead_load,
-        "live_load": live_load,
-        "wind_pressure": wind_pres,
-        "Cp_ext": Cpe,
-        "Cp_int": Cpi,
-        "fy": float(fy),
-        "gm0": gm0,
-        "section_name": sec_name,
-        "section_props": sp,
-        "design_code": design_code,
-        "lap_length_m": lap_length,
-        "lap_bolt_dia_mm": lap_bolt_dia,
-        "lap_bolt_rows": lap_bolt_rows,
-        "lap_bolts_per_row": lap_bolts_per_row,
-        "lap_bolt_grade_fub": lap_bolt_grade,
-        "lap_plate_fu": lap_plate_fu,
-    }
-    r = run_purlin_design(inp)
-    st.session_state["purlin_result"] = r
+current_input = {
+    "span_m": span,
+    "spacing_m": spacing,
+    "roof_slope_deg": slope,
+    "dead_load": dead_load,
+    "live_load": live_load,
+    "wind_pressure": wind_pres,
+    "Cp_ext": Cpe,
+    "Cp_int": Cpi,
+    "fy": float(fy),
+    "gm0": gm0,
+    "section_name": sec_name,
+    "section_props": sp,
+    "design_code": design_code,
+    "lap_length_m": lap_length,
+    "lap_bolt_dia_mm": lap_bolt_dia,
+    "lap_bolt_rows": lap_bolt_rows,
+    "lap_bolts_per_row": lap_bolts_per_row,
+    "lap_bolt_grade_fub": lap_bolt_grade,
+    "lap_plate_fu": lap_plate_fu,
+}
+
+
+def _store_current_purlin_design(show_refresh_notice=False):
+    st.session_state["purlin_result"] = run_purlin_design(current_input)
+    st.session_state["purlin_input"] = dict(current_input)
     st.session_state["purlin_project"] = project_name
     st.session_state["purlin_section_name"] = sec_name
+    if show_refresh_notice:
+        st.info(
+            "Inputs changed after the previous design/report. The purlin design "
+            "and downloadable PDF have been recalculated using the latest inputs."
+        )
+
+
+if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):
+    _store_current_purlin_design()
+elif (
+    "purlin_result" in st.session_state
+    and st.session_state.get("purlin_input") != current_input
+):
+    _store_current_purlin_design(show_refresh_notice=True)
 
 # ── Display Results ────────────────────────────────────────────────────────
 if "purlin_result" in st.session_state:
@@ -725,12 +741,8 @@ Group capacity:
     # ── PDF Download ───────────────────────────────────────────
     st.divider()
     st.markdown("### 📄 Download Design Report (PDF)")
-    pdf_bytes = generate_purlin_pdf(
-        r, project=st.session_state.get("purlin_project", "")
-    )
-    download_name = st.session_state.get(
-        "purlin_section_name", r.get("section_name", "Purlin")
-    )
+    pdf_bytes = generate_purlin_pdf(r, project=project_name)
+    download_name = sec_name or r.get("section_name", "Purlin")
     st.download_button(
         label="⬇️  Download PDF Report",
         data=pdf_bytes,
