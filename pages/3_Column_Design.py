@@ -2,7 +2,9 @@
 
 import streamlit as st
 
-st.set_page_config(page_title="Column Design | Coming Soon", page_icon="🏛️", layout="wide")
+st.set_page_config(
+    page_title="Column Design | Coming Soon", page_icon="🏛️", layout="wide"
+)
 
 st.markdown(
     """
