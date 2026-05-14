@@ -40,7 +40,21 @@ st.markdown(
              padding:10px 14px;border-radius:5px;margin:6px 0;}
 .ref-tag{color:#2E6DA4;font-size:.79rem;font-style:italic;}
 section[data-testid="stSidebar"]{background:linear-gradient(160deg,#1A3557,#2E6DA4);}
-section[data-testid="stSidebar"] *{color:#FFF!important;}
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] li,
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] span{color:#FFF!important;}
+section[data-testid="stSidebar"] input,
+section[data-testid="stSidebar"] textarea{color:#17324D!important;background:#FFFFFF!important;}
+section[data-testid="stSidebar"] input::placeholder{color:#51677D!important;opacity:1!important;}
+.sidebar-badge{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.35);border-radius:14px;padding:14px 12px;text-align:center;margin-bottom:12px;}
+.sidebar-badge .icon{font-size:2.4rem;line-height:1;margin-bottom:6px;}
+.sidebar-badge .title{font-weight:800;color:white;font-size:1rem;}
+.sidebar-badge .subtitle{color:#D6E8F7;font-size:.78rem;margin-top:2px;}
+.design-note{background:#FFF8E6;border-left:4px solid #D99A00;color:#17324D;padding:8px 10px;border-radius:6px;margin-top:8px;font-size:.84rem;}
 </style>
 """,
     unsafe_allow_html=True,
@@ -63,16 +77,23 @@ st.caption(
 
 # ── Sidebar — Project info ─────────────────────────────────────────────────
 with st.sidebar:
-    st.image(
-        "https://upload.wikimedia.org/wikipedia/en/thumb/a/a8/Bureau_of_Indian_Standards_%28BIS%29_Logo.svg/220px-Bureau_of_Indian_Standards_%28BIS%29_Logo.svg.png",
-        width=80,
+    st.markdown(
+        """
+        <div class="sidebar-badge">
+          <div class="icon">📐</div>
+          <div class="title">Purlin Design</div>
+          <div class="subtitle">IS 800 · IS 875 · Section Database</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    st.markdown("### Purlin Design")
     st.markdown("**References**")
     st.markdown(
         "- IS 800:2007 Cl. 8.2.1\n- IS 800:2007 Cl. 9.3.1.1\n- IS 800:2007 Cl. 8.4.1\n- IS 875 Pt.1/2/3\n- SP 6(1):1964"
     )
-    project_name = st.text_input("Project Name", "My Project")
+    project_name = st.text_input(
+        "Project Name", placeholder="Enter project name", value="My Project"
+    )
 
 # ── Input Columns ──────────────────────────────────────────────────────────
 st.markdown("### 🔢 Design Inputs")
@@ -185,62 +206,40 @@ with c3:
         col_b.metric("h × bf (mm)", f"{sp.get('h', 0)} × {sp.get('bf', 0)}")
         col_b.metric("tf / tw (mm)", f"{sp.get('tf', 0)} / {sp.get('tw', 0)}")
         col_b.metric("Weight (kg/m)", sp.get("weight", 0))
-        if sp.get("design_note"):
-            st.caption(sp["design_note"])
+        if sp.get("ui_note") or sp.get("design_note"):
+            st.markdown(
+                f"<div class='design-note'>{sp.get('ui_note', sp['design_note'])}</div>",
+                unsafe_allow_html=True,
+            )
 
-with st.expander(
-    "📚 Common Purlin Section Types Used in IS-Based Design", expanded=False
-):
-    st.markdown(
-        "The calculation module designs rolled **ISMB/ISLB/ISMC**, **ISA angle**, "
-        "cold-formed **lipped C/Z**, and **RHS/SHS hollow-box** sections from the "
-        "project database. The table below summarizes the supported purlin families, "
-        "common shapes, example designations, and calculation scope."
-    )
-    st.dataframe(
-        pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(
-            columns={
-                "type": "Section Type",
-                "shape": "Common Shape",
-                "designation": "Common IS / Trade Designation",
-                "examples": "Examples",
-                "typical_use": "Typical Use",
-                "calculation_status": "Calculation Status",
-            }
-        ),
-        hide_index=True,
-        use_container_width=True,
-    )
-    st.info(
-        "Cold-formed C/Z and angle entries use gross-section preliminary properties; "
-        "verify effective-width, local/distortional buckling, connection eccentricity, "
-        "and manufacturer data before issuing final construction design."
-    )
-
-with st.expander("📚 Common Purlin Section Types Used in IS-Based Design", expanded=False):
-    st.markdown(
-        "The calculation module currently designs rolled **ISMB**, **ISLB**, and **ISMC** "
-        "sections from the project database. The table below also documents other common "
-        "purlin families and cross-section shapes used in IS-based roof framing so "
-        "designers can distinguish calculable rolled sections from guidance-only alternatives."
-    )
-    st.dataframe(
-        pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(columns={
+st.markdown("### 📚 Common Purlin Section Types Used in IS-Based Design")
+st.markdown(
+    "The calculation module designs rolled **ISMB/ISLB/ISMC**, **ISA angle**, "
+    "cold-formed **lipped C/Z**, and **RHS/SHS hollow-box** sections from the "
+    "project database. The table below summarizes the supported purlin families, "
+    "common shapes, example designations, and calculation scope."
+)
+st.dataframe(
+    pd.DataFrame(COMMON_PURLIN_SECTION_TYPES).rename(
+        columns={
             "type": "Section Type",
             "shape": "Common Shape",
             "designation": "Common IS / Trade Designation",
             "examples": "Examples",
             "typical_use": "Typical Use",
             "calculation_status": "Calculation Status",
-        }),
-        hide_index=True,
-        use_container_width=True,
-    )
-    st.info(
-        "Angle, hollow/box, and cold-formed C/Z purlins are listed as common practice guidance only. "
-        "Add verified section properties and the relevant design checks before using them "
-        "as selectable calculation sections."
-    )
+        }
+    ),
+    hide_index=True,
+    use_container_width=True,
+    key="common_purlin_section_types_table",
+)
+st.info(
+    "Cold-formed C/Z and angle entries use gross-section preliminary properties; "
+    "verify effective-width, local/distortional buckling, connection eccentricity, "
+    "and manufacturer data before issuing final construction design."
+)
+
 
 # ── Run Calculation ────────────────────────────────────────────────────────
 if st.button("▶  Run Purlin Design", use_container_width=True, type="primary"):

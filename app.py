@@ -25,7 +25,16 @@ st.markdown(
 section[data-testid="stSidebar"] {
     background: linear-gradient(160deg, #1A3557 0%, #2E6DA4 100%);
 }
-section[data-testid="stSidebar"] * { color: #FFFFFF !important; }
+section[data-testid="stSidebar"] label,
+section[data-testid="stSidebar"] p,
+section[data-testid="stSidebar"] li,
+section[data-testid="stSidebar"] h1,
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] h3,
+section[data-testid="stSidebar"] span { color: #FFFFFF !important; }
+section[data-testid="stSidebar"] input,
+section[data-testid="stSidebar"] textarea { color: #17324D !important; background: #FFFFFF !important; }
+section[data-testid="stSidebar"] input::placeholder { color: #51677D !important; opacity: 1 !important; }
 section[data-testid="stSidebar"] .stSelectbox label { color: #D6E8F7 !important; }
 
 /* Main header bar */

@@ -288,6 +288,7 @@ def _equal_angle_section(leg_mm: float, thickness_mm: float) -> dict:
             "section_family": "Angle sections",
             "shape": "L-shape",
             "design_note": "Gross equal-angle properties; connection eccentricity and principal-axis bending must be checked for final design.",
+            "ui_note": "Gross angle-section check. Verify connection eccentricity and principal-axis bending before final design.",
         }
     )
 
@@ -333,6 +334,7 @@ def _cold_formed_c_section(
             "shape": "Lipped C",
             "design_standard": "IS 801 gross-section preliminary check",
             "design_note": "Gross lipped C properties excluding corner radii; verify local/distortional buckling and effective widths for final cold-formed design.",
+            "ui_note": "Preliminary gross-section check. Verify cold-formed buckling and effective widths before final design.",
         }
     )
 
@@ -350,6 +352,7 @@ def _cold_formed_z_section(
             "Zyy": round(props["Zyy"] * 0.92, 2),
             "Zpy": round(props["Zyy"] * 0.92, 2),
             "design_note": "Gross lipped Z properties excluding corner radii; verify local/distortional buckling, lap continuity, and effective widths for final cold-formed design.",
+            "ui_note": "Preliminary gross-section check. Verify cold-formed buckling, lap continuity, and effective widths before final design.",
         }
     )
     return props
@@ -388,6 +391,7 @@ def _rhs_section(depth_mm: float, width_mm: float, thickness_mm: float) -> dict:
             "section_class_override": "Compact",
             "design_standard": "IS 4923 / IS 800 gross-section check",
             "design_note": "Hollow section properties based on nominal outside dimensions and wall thickness.",
+            "ui_note": "Hollow section check based on nominal outside dimensions and wall thickness.",
         }
     )
 
