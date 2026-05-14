@@ -31,6 +31,7 @@ GREEN = colors.HexColor("#1A7A4A")
 YELLOW_BG = colors.HexColor("#FFFBE6")
 GREY_LIGHT = colors.HexColor("#F4F4F4")
 GREY_MID = colors.HexColor("#CCCCCC")
+INK = colors.HexColor("#222222")
 WHITE = colors.white
 
 PAGE_W, PAGE_H = A4
@@ -86,7 +87,8 @@ def _styles():
         "title",
         parent=base["Normal"],
         fontName="Helvetica-Bold",
-        fontSize=17,
+        fontSize=18,
+        leading=22,
         textColor=WHITE,
         alignment=TA_CENTER,
         spaceAfter=4,
@@ -96,7 +98,8 @@ def _styles():
         "subtitle",
         parent=base["Normal"],
         fontName="Helvetica",
-        fontSize=10,
+        fontSize=9.5,
+        leading=12,
         textColor=LIGHT_BLUE,
         alignment=TA_CENTER,
         spaceAfter=2,
@@ -137,7 +140,7 @@ def _styles():
         fontName="Helvetica",
         fontSize=9.2,
         leading=13,
-        textColor=colors.black,
+        textColor=INK,
         spaceAfter=2,
     )
 
@@ -157,8 +160,10 @@ def _styles():
         fontName="Courier-Bold",
         fontSize=9,
         textColor=DARK_BLUE,
-        backColor=GREY_LIGHT,
-        borderPad=4,
+        backColor=colors.HexColor("#F7F9FC"),
+        borderColor=colors.HexColor("#D7E2EE"),
+        borderWidth=0.5,
+        borderPad=5,
         leftIndent=8,
         spaceAfter=3,
         spaceBefore=3,
@@ -193,7 +198,7 @@ def _styles():
         parent=base["Normal"],
         fontName="Helvetica-Oblique",
         fontSize=8,
-        textColor=colors.grey,
+        textColor=colors.HexColor("#666666"),
         spaceAfter=2,
         alignment=TA_CENTER,
     )
@@ -213,11 +218,70 @@ def _styles():
         parent=base["Normal"],
         fontName="Helvetica",
         fontSize=7.5,
-        textColor=colors.grey,
+        textColor=colors.HexColor("#666666"),
         alignment=TA_CENTER,
     )
 
     return s
+
+
+# ── Print Layout Helpers ─────────────────────────────────────────────────────
+
+
+def _decorate_page(canvas, doc, report_title: str):
+    """Draw a professional print frame, running title, and page footer."""
+    canvas.saveState()
+    canvas.setTitle(report_title)
+    canvas.setAuthor("IS Steel Design Suite")
+    canvas.setCreator("IS Steel Design Suite")
+    canvas.setSubject("Structural steel design calculation report")
+
+    page_no = canvas.getPageNumber()
+    left = MARGIN * 0.72
+    right = PAGE_W - MARGIN * 0.72
+    top = PAGE_H - MARGIN * 0.62
+    bottom = MARGIN * 0.62
+
+    canvas.setStrokeColor(colors.HexColor("#C8D6E5"))
+    canvas.setLineWidth(0.6)
+    canvas.rect(left, bottom, right - left, top - bottom, stroke=1, fill=0)
+
+    canvas.setStrokeColor(MID_BLUE)
+    canvas.setLineWidth(0.8)
+    canvas.line(left, top - 8, right, top - 8)
+    canvas.line(left, bottom + 14, right, bottom + 14)
+
+    canvas.setFont("Helvetica-Bold", 7.5)
+    canvas.setFillColor(DARK_BLUE)
+    canvas.drawString(left + 4, top - 5.5, report_title)
+
+    canvas.setFont("Helvetica", 7.2)
+    canvas.setFillColor(colors.HexColor("#666666"))
+    canvas.drawString(left + 4, bottom + 5, "IS Steel Design Suite")
+    canvas.drawCentredString(
+        PAGE_W / 2,
+        bottom + 5,
+        "For engineering review — verify against latest BIS code provisions",
+    )
+    canvas.drawRightString(right - 4, bottom + 5, f"Page {page_no}")
+    canvas.restoreState()
+
+
+def _build_pdf(doc, story: list, report_title: str):
+    """Build a report with consistent print-ready page decoration."""
+    doc.title = report_title
+    doc.author = "IS Steel Design Suite"
+    doc.subject = "Structural steel design calculation report"
+    doc.creator = "IS Steel Design Suite"
+    doc.build(
+        story,
+        onFirstPage=lambda canvas, document: _decorate_page(
+            canvas, document, report_title
+        ),
+        onLaterPages=lambda canvas, document: _decorate_page(
+            canvas, document, report_title
+        ),
+    )
 
 
 # ── Helper Builders ──────────────────────────────────────────────────────────
@@ -231,10 +295,12 @@ def _header_table(title: str, subtitle: str, project: str, date_str: str, s: dic
         TableStyle(
             [
                 ("BACKGROUND", (0, 0), (-1, -1), DARK_BLUE),
-                ("TOPPADDING", (0, 0), (-1, -1), 8),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
-                ("LEFTPADDING", (0, 0), (-1, -1), 10),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("BOX", (0, 0), (-1, -1), 1.0, DARK_BLUE),
+                ("LINEBELOW", (0, -1), (-1, -1), 1.2, LIGHT_BLUE),
+                ("TOPPADDING", (0, 0), (-1, -1), 9),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 9),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
             ]
         )
     )
@@ -250,6 +316,8 @@ def _header_table(title: str, subtitle: str, project: str, date_str: str, s: dic
                 ("FONTNAME", (0, 0), (0, 0), "Helvetica-Bold"),
                 ("FONTNAME", (2, 0), (2, 0), "Helvetica-Bold"),
                 ("FONTNAME", (4, 0), (4, 0), "Helvetica-Bold"),
+                ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F7FAFD")),
+                ("BOX", (0, 0), (-1, -1), 0.6, colors.HexColor("#C8D6E5")),
                 ("TEXTCOLOR", (0, 0), (-1, -1), DARK_BLUE),
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
@@ -290,7 +358,7 @@ def _input_table(rows: list, s: dict, title: str = ""):
         for label, value in rows
     ]
     cw = [(PAGE_W - 2 * MARGIN) * 0.62, (PAGE_W - 2 * MARGIN) * 0.38]
-    t = Table(data, colWidths=cw)
+    t = Table(data, colWidths=cw, repeatRows=1)
     t.setStyle(
         TableStyle(
             [
@@ -300,7 +368,8 @@ def _input_table(rows: list, s: dict, title: str = ""):
                 ("FONTSIZE", (0, 0), (-1, -1), 8.8),
                 ("FONTNAME", (0, 1), (-1, -1), "Helvetica"),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, GREY_LIGHT]),
-                ("GRID", (0, 0), (-1, -1), 0.4, GREY_MID),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D8E1EA")),
+                ("BOX", (0, 0), (-1, -1), 0.65, colors.HexColor("#AFC2D5")),
                 ("TOPPADDING", (0, 0), (-1, -1), 4),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
                 ("LEFTPADDING", (0, 0), (-1, -1), 6),
@@ -331,7 +400,8 @@ def _result_box(label: str, value: str, ok: bool, s: dict):
                 ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
                 ("FONTSIZE", (0, 0), (-1, 0), 9),
                 ("TEXTCOLOR", (2, 0), (2, 0), colour),
-                ("GRID", (0, 0), (-1, -1), 0.4, colour),
+                ("BOX", (0, 0), (-1, -1), 0.9, colour),
+                ("INNERGRID", (0, 0), (-1, -1), 0.35, colour),
                 ("TOPPADDING", (0, 0), (-1, -1), 5),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
                 ("LEFTPADDING", (0, 0), (-1, -1), 6),
@@ -365,7 +435,8 @@ def _overall_verdict(status: str, s: dict):
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
                 ("TOPPADDING", (0, 0), (-1, -1), 10),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
-                ("BOX", (0, 0), (-1, -1), 1.5, fg),
+                ("BOX", (0, 0), (-1, -1), 1.2, fg),
+                ("LINEABOVE", (0, 0), (-1, 0), 1.8, fg),
             ]
         )
     )
@@ -754,7 +825,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
         )
     )
 
-    doc.build(story)
+    _build_pdf(doc, story, "Purlin Design Report")
     return buf.getvalue()
 
 
@@ -987,7 +1058,7 @@ def generate_girt_pdf(r: dict, project: str = "") -> bytes:
         )
     )
 
-    doc.build(story)
+    _build_pdf(doc, story, "Girt Design Report")
     return buf.getvalue()
 
 
@@ -1278,5 +1349,5 @@ def generate_column_pdf(r: dict, project: str = "") -> bytes:
         )
     )
 
-    doc.build(story)
+    _build_pdf(doc, story, "Column Design Report")
     return buf.getvalue()
