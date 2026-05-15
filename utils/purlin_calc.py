@@ -440,7 +440,7 @@ def _economy_prediction(
     candidate_sections: dict[str, dict[str, dict[str, Any]]],
     max_recommendations: int = 5,
 ) -> dict[str, Any]:
-    """Rank safe section alternatives by weight using a transparent AI-style heuristic.
+    """Rank safe section alternatives by weight using a transparent heuristic.
 
     This is intentionally deterministic and local: it does not call an external
     model/API.  The score favours low self-weight, adequate-but-not-excessive
@@ -536,7 +536,7 @@ def _economy_prediction(
 
     return {
         "method": (
-            "Local AI-style economy predictor: exhaustive section scan + deterministic "
+            "Local economy predictor: exhaustive section scan + deterministic "
             "weight/utilisation scoring; no external AI/API call."
         ),
         "current_section": current_result.get("section_name"),
