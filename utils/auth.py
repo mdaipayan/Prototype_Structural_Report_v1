@@ -32,6 +32,35 @@ def _configured_password() -> str | None:
     return None
 
 
+def _log_out() -> None:
+    """Clear the authenticated session and restart the Streamlit run."""
+    st.session_state.password_authenticated = False
+    st.rerun()
+
+
+def _show_logout_controls() -> None:
+    """Render visible logout controls in the main page and sidebar."""
+    status_col, logout_col = st.columns([4, 1])
+    with status_col:
+        st.caption("🔓 Authenticated session")
+    with logout_col:
+        st.button(
+            "Log out",
+            key="logout_main",
+            use_container_width=True,
+            on_click=_log_out,
+        )
+
+    with st.sidebar:
+        st.markdown("### 🔐 Session")
+        st.button(
+            "Log out",
+            key="logout_sidebar",
+            use_container_width=True,
+            on_click=_log_out,
+        )
+
+
 def require_password() -> None:
     """Stop the page until the visitor enters the configured password."""
     expected_password = _configured_password()
@@ -42,10 +71,7 @@ def require_password() -> None:
         st.stop()
 
     if st.session_state.get("password_authenticated"):
-        with st.sidebar:
-            if st.button("Log out", use_container_width=True):
-                st.session_state.password_authenticated = False
-                st.rerun()
+        _show_logout_controls()
         return
 
     st.title("🔒 Protected Application")
