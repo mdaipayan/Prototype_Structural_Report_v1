@@ -932,7 +932,7 @@ def generate_purlin_pdf(r: dict, project: str = "") -> bytes:
     # ── AI Economy Predictor ────────────────────────────────
     economy = r.get("economy_prediction", {})
     if economy.get("recommendations"):
-        story += _section_heading("11.  AI ECONOMY PREDICTOR — SAFE SECTION OPTIONS", s)
+        story += _section_heading("11.  ECONOMY PREDICTOR — SAFE SECTION OPTIONS", s)
         story += _formula_block(
             f"Method: {economy.get('method', 'Local deterministic economy scan')}\n\n"
             f"Verdict: {economy.get('verdict', '')}\n\n"
