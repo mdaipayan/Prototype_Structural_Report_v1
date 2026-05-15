@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import hmac
 import os
 
@@ -32,9 +33,15 @@ def _configured_password() -> str | None:
     return None
 
 
+def _password_fingerprint(password: str) -> str:
+    """Return a stable, non-reversible marker for the active password."""
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+
 def _log_out() -> None:
     """Clear the authenticated session and restart the Streamlit run."""
     st.session_state.password_authenticated = False
+    st.session_state.pop("password_fingerprint", None)
     st.rerun()
 
 
@@ -61,9 +68,16 @@ def require_password() -> None:
         st.info(_PASSWORD_HELP)
         st.stop()
 
+    expected_fingerprint = _password_fingerprint(expected_password)
+
     if st.session_state.get("password_authenticated"):
-        _show_logout_controls()
-        return
+        if st.session_state.get("password_fingerprint") == expected_fingerprint:
+            _show_logout_controls()
+            return
+
+        st.session_state.password_authenticated = False
+        st.session_state.pop("password_fingerprint", None)
+        st.warning("Application password changed. Please sign in again.")
 
     st.title("🔒 Protected Application")
     st.caption("Enter the application password to access the design suite.")
@@ -75,6 +89,7 @@ def require_password() -> None:
     if submitted:
         if hmac.compare_digest(entered_password, expected_password):
             st.session_state.password_authenticated = True
+            st.session_state.password_fingerprint = expected_fingerprint
             st.rerun()
         else:
             st.error("Incorrect password. Please try again.")
