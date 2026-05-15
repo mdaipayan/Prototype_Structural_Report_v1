@@ -397,40 +397,194 @@ def _rhs_section(depth_mm: float, width_mm: float, thickness_mm: float) -> dict:
     )
 
 
+def _rolled_i_section(
+    depth_mm: float, flange_mm: float, web_mm: float, flange_thickness_mm: float
+) -> dict:
+    """Approximate rolled I/beam properties from flange and web rectangles."""
+    h = depth_mm
+    b = flange_mm
+    tw = web_mm
+    tf = flange_thickness_mm
+    web_depth = h - 2.0 * tf
+    area = 2.0 * b * tf + web_depth * tw
+    ixx = (
+        2.0 * ((b * tf**3 / 12.0) + b * tf * (h / 2.0 - tf / 2.0) ** 2)
+        + tw * web_depth**3 / 12.0
+    )
+    iyy = 2.0 * (tf * b**3 / 12.0) + web_depth * tw**3 / 12.0
+    zxx = ixx / (h / 2.0)
+    zyy = iyy / (b / 2.0)
+    area_cm2, weight = _area_weight(area)
+    return _finalize_section(
+        {
+            "h": h,
+            "bf": b,
+            "tw": tw,
+            "tf": tf,
+            "Area": round(area_cm2, 1),
+            "weight": round(weight, 1),
+            "Ixx": round(ixx / 1.0e4, 1),
+            "Iyy": round(iyy / 1.0e4, 1),
+            "Zxx": round(zxx / 1000.0, 1),
+            "Zyy": round(zyy / 1000.0, 2),
+            "Zpx": round(1.14 * zxx / 1000.0, 1),
+            "Zpy": round(1.55 * zyy / 1000.0, 1),
+            "Av": round(h * tw, 2),
+            "section_family": "Beam / I-sections",
+            "shape": "I-shape / beam profile",
+            "design_note": "Gross rolled I-section properties based on nominal rectangular web/flange dimensions for preliminary sizing.",
+            "ui_note": "Additional gross-property rolled beam entry. Verify against final IS 808/SP 6 tables for issued design.",
+        }
+    )
+
+
+def _rolled_channel_section(
+    depth_mm: float, flange_mm: float, web_mm: float, flange_thickness_mm: float
+) -> dict:
+    """Approximate rolled channel properties from web and flange rectangles."""
+    h = depth_mm
+    b = flange_mm
+    tw = web_mm
+    tf = flange_thickness_mm
+    pieces = [
+        (tw, h, tw / 2.0, h / 2.0),
+        (b - tw, tf, tw + (b - tw) / 2.0, h - tf / 2.0),
+        (b - tw, tf, tw + (b - tw) / 2.0, tf / 2.0),
+    ]
+    area = sum(width * height for width, height, _, _ in pieces)
+    cx = sum(width * height * x for width, height, x, _ in pieces) / area
+    cy = h / 2.0
+    ixx = sum(
+        width * height**3 / 12.0 + width * height * (y - cy) ** 2
+        for width, height, _, y in pieces
+    )
+    iyy = sum(
+        height * width**3 / 12.0 + width * height * (x - cx) ** 2
+        for width, height, x, _ in pieces
+    )
+    zxx = ixx / (h / 2.0)
+    zyy = iyy / max(cx, b - cx)
+    area_cm2, weight = _area_weight(area)
+    return _finalize_section(
+        {
+            "h": h,
+            "bf": b,
+            "tw": tw,
+            "tf": tf,
+            "Area": round(area_cm2, 1),
+            "weight": round(weight, 1),
+            "Ixx": round(ixx / 1.0e4, 1),
+            "Iyy": round(iyy / 1.0e4, 1),
+            "Zxx": round(zxx / 1000.0, 1),
+            "Zyy": round(zyy / 1000.0, 2),
+            "Zpx": round(1.14 * zxx / 1000.0, 1),
+            "Zpy": round(1.75 * zyy / 1000.0, 1),
+            "Av": round(h * tw, 2),
+            "section_family": "Channel sections",
+            "shape": "C-channel / U-channel",
+            "design_note": "Gross rolled channel properties based on nominal rectangular web/flange dimensions for preliminary sizing.",
+            "ui_note": "Additional gross-property rolled channel entry. Verify against final IS 808/SP 6 tables for issued design.",
+        }
+    )
+
+
+# Supplemental rolled-section database entries. Existing tabulated sections above are
+# retained unchanged; these additional sizes use nominal gross rectangular-element
+# properties so users can run preliminary comparisons over a wider range.
+ISMB.update(
+    {
+        "ISMB 125": _rolled_i_section(125, 70, 4.4, 7.6),
+        "ISMB 175": _rolled_i_section(175, 85, 5.8, 9.0),
+        "ISMB 225": _rolled_i_section(225, 110, 6.5, 11.8),
+        "ISMB 350": _rolled_i_section(350, 140, 8.1, 14.2),
+        "ISMB 450": _rolled_i_section(450, 150, 9.4, 17.4),
+        "ISMB 500": _rolled_i_section(500, 180, 10.2, 17.2),
+    }
+)
+
+ISLB.update(
+    {
+        "ISLB 125": _rolled_i_section(125, 75, 4.4, 6.5),
+        "ISLB 175": _rolled_i_section(175, 90, 5.1, 6.6),
+        "ISLB 225": _rolled_i_section(225, 110, 5.8, 7.6),
+        "ISLB 300": _rolled_i_section(300, 150, 6.7, 9.4),
+        "ISLB 350": _rolled_i_section(350, 165, 7.4, 11.4),
+        "ISLB 400": _rolled_i_section(400, 165, 8.0, 12.5),
+    }
+)
+
+ISMC.update(
+    {
+        "ISMC 75": _rolled_channel_section(75, 40, 4.8, 7.5),
+        "ISMC 125": _rolled_channel_section(125, 65, 5.3, 8.1),
+        "ISMC 175": _rolled_channel_section(175, 75, 6.0, 10.2),
+        "ISMC 225": _rolled_channel_section(225, 80, 6.4, 12.4),
+        "ISMC 350": _rolled_channel_section(350, 100, 8.1, 15.0),
+        "ISMC 400": _rolled_channel_section(400, 100, 8.6, 15.3),
+    }
+)
+
+
 # Indian Standard Angle Sections (equal angles) for purlin design selection.
 ISA = {
+    "ISA 40x40x5": _equal_angle_section(40, 5),
     "ISA 50x50x6": _equal_angle_section(50, 6),
+    "ISA 60x60x6": _equal_angle_section(60, 6),
     "ISA 65x65x6": _equal_angle_section(65, 6),
     "ISA 75x75x8": _equal_angle_section(75, 8),
+    "ISA 80x80x8": _equal_angle_section(80, 8),
     "ISA 90x90x8": _equal_angle_section(90, 8),
     "ISA 100x100x10": _equal_angle_section(100, 10),
+    "ISA 110x110x10": _equal_angle_section(110, 10),
+    "ISA 130x130x12": _equal_angle_section(130, 12),
+    "ISA 150x150x12": _equal_angle_section(150, 12),
 }
 
 # Cold-formed lipped C purlins.  Dimensions are nominal flat-element sizes.
 COLD_FORMED_C = {
+    "CFLC 100x50x15x1.6": _cold_formed_c_section(100, 50, 15, 1.6),
+    "CFLC 125x55x15x1.6": _cold_formed_c_section(125, 55, 15, 1.6),
     "CFLC 150x60x20x2.0": _cold_formed_c_section(150, 60, 20, 2.0),
     "CFLC 175x65x20x2.0": _cold_formed_c_section(175, 65, 20, 2.0),
     "CFLC 200x70x20x2.5": _cold_formed_c_section(200, 70, 20, 2.5),
+    "CFLC 225x70x20x2.5": _cold_formed_c_section(225, 70, 20, 2.5),
     "CFLC 250x75x25x2.5": _cold_formed_c_section(250, 75, 25, 2.5),
+    "CFLC 275x75x25x3.0": _cold_formed_c_section(275, 75, 25, 3.0),
     "CFLC 300x80x25x3.0": _cold_formed_c_section(300, 80, 25, 3.0),
+    "CFLC 350x90x30x3.0": _cold_formed_c_section(350, 90, 30, 3.0),
+    "CFLC 400x100x30x3.2": _cold_formed_c_section(400, 100, 30, 3.2),
 }
 
 # Cold-formed lipped Z purlins.  Dimensions are nominal flat-element sizes.
 COLD_FORMED_Z = {
+    "CFLZ 100x50x15x1.6": _cold_formed_z_section(100, 50, 15, 1.6),
+    "CFLZ 125x55x15x1.6": _cold_formed_z_section(125, 55, 15, 1.6),
     "CFLZ 150x60x20x2.0": _cold_formed_z_section(150, 60, 20, 2.0),
     "CFLZ 175x65x20x2.0": _cold_formed_z_section(175, 65, 20, 2.0),
     "CFLZ 200x70x20x2.5": _cold_formed_z_section(200, 70, 20, 2.5),
+    "CFLZ 225x70x20x2.5": _cold_formed_z_section(225, 70, 20, 2.5),
     "CFLZ 250x75x25x2.5": _cold_formed_z_section(250, 75, 25, 2.5),
+    "CFLZ 275x75x25x3.0": _cold_formed_z_section(275, 75, 25, 3.0),
     "CFLZ 300x80x25x3.0": _cold_formed_z_section(300, 80, 25, 3.0),
+    "CFLZ 350x90x30x3.0": _cold_formed_z_section(350, 90, 30, 3.0),
+    "CFLZ 400x100x30x3.2": _cold_formed_z_section(400, 100, 30, 3.2),
 }
 
 # Rectangular/square hollow purlin sections based on nominal outside dimensions.
 HOLLOW_BOX = {
+    "RHS 75x50x3.2": _rhs_section(75, 50, 3.2),
     "RHS 100x50x3.2": _rhs_section(100, 50, 3.2),
+    "RHS 125x75x3.6": _rhs_section(125, 75, 3.6),
     "RHS 150x75x4.0": _rhs_section(150, 75, 4.0),
+    "RHS 175x100x4.0": _rhs_section(175, 100, 4.0),
     "RHS 200x100x5.0": _rhs_section(200, 100, 5.0),
+    "RHS 250x150x6.0": _rhs_section(250, 150, 6.0),
+    "RHS 300x150x6.0": _rhs_section(300, 150, 6.0),
+    "SHS 75x75x3.2": _rhs_section(75, 75, 3.2),
     "SHS 100x100x4.0": _rhs_section(100, 100, 4.0),
+    "SHS 125x125x4.0": _rhs_section(125, 125, 4.0),
     "SHS 150x150x5.0": _rhs_section(150, 150, 5.0),
+    "SHS 200x200x6.0": _rhs_section(200, 200, 6.0),
 }
 
 
@@ -443,7 +597,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "type": "Channel sections",
         "shape": "C-channel / U-channel",
         "designation": "ISMC / ISLC",
-        "examples": "ISMC 100, ISMC 150, ISMC 200",
+        "examples": "ISMC 75, ISMC 150, ISMC 300, ISMC 400",
         "typical_use": "Most common rolled purlin option for roof sheeting support and simple rafter connections.",
         "calculation_status": "Available for design when present in ISMC table",
     },
@@ -451,7 +605,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "type": "Beam / I-sections",
         "shape": "I-shape / beam profile",
         "designation": "ISMB / ISLB",
-        "examples": "ISMB 150, ISMB 200, ISLB 200",
+        "examples": "ISMB 125, ISMB 300, ISMB 500, ISLB 400",
         "typical_use": "Used where longer spans, heavier roof loads, or higher wind effects require greater flexural stiffness.",
         "calculation_status": "Available for design when present in ISMB/ISLB tables",
     },
@@ -459,7 +613,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "type": "Angle sections",
         "shape": "L-shape / double-angle",
         "designation": "ISA",
-        "examples": "ISA 50x50x6, ISA 75x75x8, ISA 100x100x10",
+        "examples": "ISA 40x40x5, ISA 75x75x8, ISA 100x100x10, ISA 150x150x12",
         "typical_use": "Economical for lighter roofs and shorter spans; often adopted as single or back-to-back double angles.",
         "calculation_status": "Available for design with gross angle-section properties",
     },
@@ -467,7 +621,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "type": "Cold-formed C-sections",
         "shape": "C-shape / lipped channel",
         "designation": "C / lipped C",
-        "examples": "CFLC 150x60x20x2.0, CFLC 200x70x20x2.5",
+        "examples": "CFLC 100x50x15x1.6, CFLC 200x70x20x2.5, CFLC 400x100x30x3.2",
         "typical_use": "Common in light-gauge and pre-engineered building roof systems.",
         "calculation_status": "Available with effective-width cold-formed design checks",
     },
@@ -475,7 +629,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "type": "Cold-formed Z-sections",
         "shape": "Z-shape / lipped Z",
         "designation": "Z / lipped Z",
-        "examples": "CFLZ 150x60x20x2.0, CFLZ 200x70x20x2.5",
+        "examples": "CFLZ 100x50x15x1.6, CFLZ 200x70x20x2.5, CFLZ 400x100x30x3.2",
         "typical_use": "Preferred for continuous purlin lines and lap connections over supports in PEB roofs.",
         "calculation_status": "Available with effective-width cold-formed design checks",
     },
@@ -483,7 +637,7 @@ COMMON_PURLIN_SECTION_TYPES = [
         "type": "Hollow / box sections",
         "shape": "RHS / SHS / box profile",
         "designation": "IS 4923 tubular sections",
-        "examples": "RHS 150x75x4.0, RHS 200x100x5.0, SHS 100x100x4.0",
+        "examples": "RHS 75x50x3.2, RHS 200x100x5.0, SHS 200x200x6.0",
         "typical_use": "Occasionally used where torsional stiffness, closed profiles, or architectural exposed framing are required.",
         "calculation_status": "Available for design with hollow-section properties",
     },
