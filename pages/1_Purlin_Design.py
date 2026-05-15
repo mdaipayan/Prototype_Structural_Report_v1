@@ -860,7 +860,7 @@ Group capacity:
 
     # ── AI Economy Predictor ───────────────────────────────────
     st.divider()
-    st.markdown("### 🤖 AI Economy Predictor — Safe & Economical Section")
+    st.markdown("### 🤖 Economy Predictor — Safe & Economical Section")
     economy = r.get("economy_prediction", {})
     if economy.get("recommendations"):
         if economy.get("current_economical"):
