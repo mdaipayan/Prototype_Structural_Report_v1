@@ -39,7 +39,7 @@ def _log_out() -> None:
 
 
 def _show_logout_controls() -> None:
-    """Render visible logout controls in the main page and sidebar."""
+    """Render visible logout controls in the main page."""
     status_col, logout_col = st.columns([4, 1])
     with status_col:
         st.caption("🔓 Authenticated session")
@@ -47,15 +47,6 @@ def _show_logout_controls() -> None:
         st.button(
             "Log out",
             key="logout_main",
-            use_container_width=True,
-            on_click=_log_out,
-        )
-
-    with st.sidebar:
-        st.markdown("### 🔐 Session")
-        st.button(
-            "Log out",
-            key="logout_sidebar",
             use_container_width=True,
             on_click=_log_out,
         )
