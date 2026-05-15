@@ -4,3 +4,4 @@ pandas
 numpy
 fpdf2
 matplotlib
+streamlit-google-auth==1.1.8
