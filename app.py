@@ -10,12 +10,16 @@ Pages:
 
 import streamlit as st
 
+from utils.auth import require_password
+
 st.set_page_config(
     page_title="IS Steel Design Suite",
     page_icon="🏗️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+
+require_password()
 
 # ── Custom CSS ─────────────────────────────────────────────────────────────
 st.markdown(
