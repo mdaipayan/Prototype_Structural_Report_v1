@@ -10,6 +10,7 @@ from reportlab.platypus import CondPageBreak
 from utils.pdf_report import _section_heading, _styles, _subheading, generate_purlin_pdf
 from utils.purlin_calc import run_purlin_design
 from utils.sections import (
+    ALL_SECTIONS,
     COLD_FORMED_C,
     COLD_FORMED_Z,
     COMMON_PURLIN_SECTION_TYPES,
@@ -220,6 +221,30 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertIn("L-shape / double-angle", shapes)
         self.assertIn("RHS / SHS / box profile", shapes)
 
+    def test_expanded_steel_section_database_includes_each_family(self):
+        section_families = {
+            "ISMB": (ISMB, "ISMB 500", 12),
+            "ISLB": (ISLB, "ISLB 400", 10),
+            "ISMC": (ISMC, "ISMC 400", 11),
+            "ISA": (ISA, "ISA 150x150x12", 11),
+            "Cold-formed C": (COLD_FORMED_C, "CFLC 400x100x30x3.2", 11),
+            "Cold-formed Z": (COLD_FORMED_Z, "CFLZ 400x100x30x3.2", 11),
+            "Hollow / box": (HOLLOW_BOX, "SHS 200x200x6.0", 13),
+        }
+
+        for family_name, (
+            section_table,
+            expected_section,
+            minimum_count,
+        ) in section_families.items():
+            with self.subTest(family_name=family_name):
+                self.assertGreaterEqual(len(section_table), minimum_count)
+                self.assertIn(expected_section, section_table)
+                self.assertIn(expected_section, ALL_SECTIONS)
+                self.assertGreater(section_table[expected_section]["Area"], 0.0)
+                self.assertGreater(section_table[expected_section]["weight"], 0.0)
+                self.assertGreater(section_table[expected_section]["Zxx"], 0.0)
+
     def test_added_purlin_section_databases_run_design_calculations(self):
         section_sets = {
             "ISA 100x100x10": ISA["ISA 100x100x10"],
@@ -318,7 +343,7 @@ class PurlinDesignTests(unittest.TestCase):
         self.assertTrue(any(b"12.37" in page for page in decoded_pages))
         self.assertTrue(any(b"Self-weight note" in page for page in decoded_pages))
         self.assertTrue(any(b"LTB" in page for page in decoded_pages))
-        self.assertTrue(any(b"AI ECONOMY PREDICTOR" in page for page in decoded_pages))
+        self.assertTrue(any(b"ECONOMY PREDICTOR" in page for page in decoded_pages))
         self.assertTrue(any(b"Top Safe Economical Alternatives" in page for page in decoded_pages))
 
     def test_purlin_pdf_does_not_end_with_blank_footer_page(self):
